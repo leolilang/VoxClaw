@@ -1,0 +1,54 @@
+audio:
+  sample_rate: 16000
+  channels: 1
+  block_size: 512
+  input_device: null   # null = 系统默认输入设备，可用 `python -m audio.device` 查看设备列表
+  output_device: null
+
+wakeword:
+  # 内置模型名（如 hey_jarvis / alexa），或放置于 wakeword/hotwords/ 下的自训练 .onnx 文件名（如 hey_kiwi.onnx）
+  model: hey_jarvis
+  threshold: 0.25   # 唤醒不灵敏调低（如 0.25），误唤醒多调高；可用 python scripts/test_wakeword.py 实测分数
+  cooldown_s: 2.0
+
+vad:
+  threshold: 0.55
+  silence_ms: 500        # 静音多久判定说话结束
+  speech_timeout_s: 6.0  # 唤醒后等待开口的最长时间
+  max_record_s: 15.0     # 单次录音最长时长
+  pre_roll_ms: 300       # 说话起点前保留的音频，避免吞字
+
+conversation:
+  mode: multi              # single=单轮（答完回待机）/ multi=多轮（答完继续听追问，无需再喊唤醒词）
+  follow_up_timeout_s: 10.0  # 多轮模式下等待追问的时长，超时回待机
+  # 退出指令词：说这些词（完全匹配，或不超过6字的短句包含）即结束对话回待机
+  exit_words: ["关闭", "退下", "关机", "停止", "退出", "再见", "闭嘴", "休眠", "拜拜"]
+
+step:
+  api_key: ""            # 也可通过环境变量 STEP_API_KEY 设置
+  stt_endpoint: https://api.stepfun.com/v1/audio/transcriptions
+  tts_endpoint: https://api.stepfun.com/v1/audio/speech
+  stt_model: step-asr
+  tts_model: step-tts-mini
+
+llm:
+  provider: stepfun     # openclaw=本地 OpenClaw Gateway（贾维斯）/ stepfun=Step API 直连（更快）
+  timeout_s: 60.0
+  max_history: 20
+  system_prompt: 你是 VoxClaw 语音助手。回答要简洁口语化，适合语音播报，控制在三句话以内，不要使用 Markdown 格式。
+  openclaw:
+    endpoint: http://127.0.0.1:18789
+    api_key: ""   # OpenClaw gateway.auth.token
+    model: openclaw
+  stepfun:
+    endpoint: https://api.stepfun.com
+    api_key: ""            # 留空则复用上面 step.api_key
+    model: step-3.5-flash
+
+tts:
+  # StepFun 音色 ID，如 wenrounvsheng(温柔女声) / cixingnansheng(磁性男声) / linjiajiejie(邻家姐姐)
+  voice: linjiajiejie
+  speed: 1.0
+  transport: websocket   # websocket=流式低延迟（边合成边播） / http=整段合成后播放（效果不好可切回）
+  ws_endpoint: wss://api.stepfun.com/v1/realtime/audio
+  ws_sample_rate: 24000

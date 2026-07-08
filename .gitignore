@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 本地配置（包含 API Key，勿提交；模板见 config/config.example.yaml）
+config/config.yaml
+
+# 自训练唤醒词模型
+wakeword/hotwords/*.onnx
+
+# 日志与系统文件
+*.log
+logs/
+.DS_Store
