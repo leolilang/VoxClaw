@@ -6,7 +6,7 @@
 
 ## 核心特性
 
-- **双 LLM 后端一键切换**：本地 OpenClaw Gateway 或 Step API 直连，改 `llm.provider` 即可
+- **多 LLM 后端一键切换**：本地 OpenClaw Gateway、Step API 直连或 DeepSeek API，改 `llm.provider` 即可
 - **流式 TTS 低延迟**：WebSocket 边合成边播放，首块音频约 1.6s 出声（HTTP 整段模式可切回）
 - **多轮对话**：回答完继续监听追问（默认 10s），无需重复喊唤醒词
 - **语音退出指令**：多轮对话中说"退下 / 关闭 / 停止"等词即回待机，指令词可配置
@@ -67,6 +67,7 @@ cp config/config.example.yaml config/config.yaml   # 首次使用先复制模板
 - `llm.provider`：LLM 后端
   - `openclaw`：本地 OpenClaw Gateway（`llm.openclaw.endpoint` 默认 `http://127.0.0.1:18789`，`api_key` 填 gateway.auth.token）
   - `stepfun`：Step API 直连（`api_key` 留空则复用 `step.api_key`）
+  - `deepseek`：DeepSeek API（`api_key` 可填 `llm.deepseek.api_key`，也可用环境变量 `DEEPSEEK_API_KEY`）
 - `wakeword.model`：唤醒词模型
   - 内置模型名，如 `hey_jarvis`、`alexa`（首次运行自动下载）
   - 或将自训练 `.onnx` 模型放入 `wakeword/hotwords/`，配置文件名如 `hey_kiwi.onnx`
@@ -145,7 +146,7 @@ voxclaw/
 | `conversation.mode` | multi | 单轮 / 多轮对话 |
 | `conversation.follow_up_timeout_s` | 10.0 | 多轮模式等待追问时长 |
 | `conversation.exit_words` | 关闭/退下/停止... | 语音退出指令词列表 |
-| `llm.provider` | openclaw | LLM 后端：openclaw / stepfun |
+| `llm.provider` | openclaw | LLM 后端：openclaw / stepfun / deepseek |
 | `tts.voice` | wenrounvsheng | 合成音色（wenrounvsheng / cixingnansheng / linjiajiejie 等） |
 | `tts.transport` | websocket | TTS 传输：websocket 流式 / http 整段 |
 

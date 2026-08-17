@@ -54,7 +54,7 @@ class LLMEndpointConfig(BaseModel):
 
 
 class LLMConfig(BaseModel):
-    provider: str = "openclaw"  # openclaw=本地 OpenClaw Gateway / stepfun=Step API 直连
+    provider: str = "openclaw"  # openclaw=本地 OpenClaw Gateway / stepfun=Step API 直连 / deepseek=DeepSeek API
     timeout_s: float = 60.0
     max_history: int = 20
     system_prompt: str = "你是 VoxClaw 语音助手。回答要简洁口语化，适合语音播报。"
@@ -63,6 +63,9 @@ class LLMConfig(BaseModel):
     )
     stepfun: LLMEndpointConfig = LLMEndpointConfig(
         endpoint="https://api.stepfun.com", model="step-3.5-flash"
+    )
+    deepseek: LLMEndpointConfig = LLMEndpointConfig(
+        endpoint="https://api.deepseek.com", model="DeepSeek-V4-Flash-0731"
     )
 
 
@@ -95,9 +98,9 @@ class Settings(BaseModel):
     tts: TTSConfig = TTSConfig()
 
     def resolve_llm(self) -> ChatConfig:
-        if self.llm.provider not in ("openclaw", "stepfun"):
-            raise ValueError(f"未知的 llm.provider: {self.llm.provider}（可选 openclaw / stepfun）")
-        ep = self.llm.stepfun if self.llm.provider == "stepfun" else self.llm.openclaw
+        if self.llm.provider not in ("openclaw", "stepfun", "deepseek"):
+            raise ValueError(f"未知的 llm.provider: {self.llm.provider}（可选 openclaw / stepfun / deepseek）")
+        ep = getattr(self.llm, self.llm.provider)
         api_key = ep.api_key
         if not api_key and self.llm.provider == "stepfun":
             api_key = self.step.api_key  # stepfun 直连时默认复用 step.api_key
@@ -126,4 +129,7 @@ def load_settings(path: Path | str | None = None) -> Settings:
     openclaw_key = os.environ.get("OPENCLAW_API_KEY")
     if openclaw_key:
         settings.llm.openclaw.api_key = openclaw_key
+    deepseek_key = os.environ.get("DEEPSEEK_API_KEY")
+    if deepseek_key:
+        settings.llm.deepseek.api_key = deepseek_key
     return settings

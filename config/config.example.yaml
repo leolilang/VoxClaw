@@ -32,7 +32,7 @@ step:
   tts_model: step-tts-mini
 
 llm:
-  provider: stepfun     # openclaw=本地 OpenClaw Gateway（贾维斯）/ stepfun=Step API 直连（更快）
+  provider: stepfun     # openclaw=本地 OpenClaw Gateway（贾维斯）/ stepfun=Step API 直连（更快）/ deepseek=DeepSeek API
   timeout_s: 60.0
   max_history: 20
   system_prompt: 你是 VoxClaw 语音助手。回答要简洁口语化，适合语音播报，控制在三句话以内，不要使用 Markdown 格式。
@@ -44,6 +44,10 @@ llm:
     endpoint: https://api.stepfun.com
     api_key: ""            # 留空则复用上面 step.api_key
     model: step-3.5-flash
+  deepseek:
+    endpoint: https://api.deepseek.com
+    api_key: ""            # 也可通过环境变量 DEEPSEEK_API_KEY 设置
+    model: DeepSeek-V4-Flash-0731
 
 tts:
   # StepFun 音色 ID，如 wenrounvsheng(温柔女声) / cixingnansheng(磁性男声) / linjiajiejie(邻家姐姐)
