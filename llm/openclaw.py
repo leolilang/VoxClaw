@@ -1,4 +1,4 @@
-"""LLM 客户端（OpenAI 兼容 chat completions 接口，支持 OpenClaw Gateway / Step API 直连）。"""
+"""LLM 客户端（OpenAI 兼容 chat completions 接口，支持 OpenClaw Gateway / Step API / DeepSeek API）。"""
 
 import httpx
 from loguru import logger
