@@ -1,6 +1,6 @@
 # VoxClaw
 
-基于 Python 的本地 AI 语音助手，运行于 macOS（Apple Silicon）。
+基于 Python 的本地 AI 语音助手，支持 macOS 与 Windows。
 
 完整链路：**唤醒词检测 (openWakeWord) → 语音活动检测 (Silero VAD) → 语音识别 (Step STT) → AI 对话 (OpenClaw Gateway / Step API) → 语音合成 (Step TTS，支持 WebSocket 流式) → 本地播放**。
 
@@ -22,20 +22,48 @@ IDLE → (唤醒词) → LISTENING → (开口) → RECORDING → (静音) → T
                     IDLE
 ```
 
+## 平台支持
+
+| 平台 | 支持状态 | 说明 |
+| --- | --- | --- |
+| macOS | 支持 | 推荐 Apple Silicon + Python 3.11；首次运行需授权麦克风，DEBUG 热键需授权辅助功能。 |
+| Windows | 支持 | 推荐 Windows 10/11 + Python 3.11；需允许桌面应用访问麦克风。 |
+
+音频采集/播放使用 `sounddevice` + PortAudio，唤醒词和 VAD 使用 ONNX 推理，因此代码不绑定某个系统。不同平台主要差异在音频设备名称、权限设置和全局热键占用。
+
 ## 快速开始
 
 ### 1. 环境要求
 
-- macOS（Apple Silicon M 系列）
 - Python 3.11+
-- 麦克风权限（首次运行时系统会弹窗请求，需授权给终端）
+- 可用麦克风与扬声器/耳机
+- 网络访问 Step / DeepSeek / OpenClaw 等接口
+- macOS：系统设置 → 隐私与安全性 → 麦克风，允许当前终端访问；DEBUG 热键还需“辅助功能”权限
+- Windows：设置 → 隐私和安全性 → 麦克风，开启“麦克风访问权限”和“允许桌面应用访问麦克风”
 
 ### 2. 安装依赖
+
+macOS Terminal：
 
 ```bash
 python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+```
+
+Windows PowerShell：
+
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+如果 PowerShell 阻止激活脚本，可先执行：
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 ```
 
 ### 3. 生成提示音（首次运行前）
@@ -62,6 +90,12 @@ python scripts/generate_voice_assets.py   # 语音版（用 config 中的音色�
 cp config/config.example.yaml config/config.yaml   # 首次使用先复制模板
 ```
 
+Windows PowerShell：
+
+```powershell
+Copy-Item config\config.example.yaml config\config.yaml
+```
+
 编辑 `config/config.yaml`：
 
 - `step.api_key`：Step API 密钥（也可用环境变量 `STEP_API_KEY`），用于 STT/TTS
@@ -81,6 +115,8 @@ cp config/config.example.yaml config/config.yaml   # 首次使用先复制模板
 python -m audio.device
 ```
 
+Windows 上如果默认设备不可用，可将输出里的设备编号填入 `audio.input_device` / `audio.output_device`。
+
 ### 5. 运行
 
 ```bash
@@ -91,7 +127,32 @@ python app.py --config 其他配置.yaml
 
 启动后对着麦克风说唤醒词（默认 "Hey Jarvis"），听到提示音后说出问题即可。按 `Ctrl+C` 退出。
 
-`--debug` 模式下也可以按 `Shift+Control+I` 手动触发唤醒：程序会跳过 openWakeWord 检测，直接播放唤醒提示音并进入录音，从而验证后续 STT、AI 回复和 TTS。该热键由 `debug.manual_wake_hotkey` 配置；macOS 首次使用全局热键时，可能需要在系统设置的“隐私与安全性 → 辅助功能”中授权当前终端。
+`--debug` 模式下也可以按 `Shift+Control+I` 手动触发唤醒：程序会跳过 openWakeWord 检测，直接播放唤醒提示音并进入录音，从而验证后续 STT、AI 回复和 TTS。该热键由 `debug.manual_wake_hotkey` 配置；macOS 首次使用全局热键时，可能需要在系统设置的“隐私与安全性 → 辅助功能”中授权当前终端。Windows 如遇热键冲突，可改为 `<ctrl>+<alt>+i`。
+
+## Windows 使用指南
+
+1. 使用 PowerShell 安装依赖并复制 `config/config.example.yaml` 到 `config/config.yaml`。
+2. 在 Windows 设置中允许桌面应用访问麦克风。
+3. 运行 `python -m audio.device`，确认存在输入/输出设备；如默认设备不对，把设备编号写入配置：
+
+```yaml
+audio:
+  input_device: 1
+  output_device: 3
+```
+
+4. 先运行 `python scripts/generate_assets.py` 生成无需 API Key 的兜底提示音。
+5. 运行 `python app.py --debug`，先用 `Shift+Control+I` 手动唤醒验证录音、STT、LLM、TTS 链路。
+6. 如果唤醒词不灵敏，运行 `python scripts/test_wakeword.py` 查看分数，并调整 `wakeword.threshold`。
+
+Windows 常见音频后端是 WASAPI / MME / DirectSound，推荐优先使用系统默认设备；如果蓝牙耳机同时提供“耳机”和“免提”设备，建议选择独立麦克风或免提输入，避免采样率和占用冲突。
+
+## macOS 使用指南
+
+1. 使用 Terminal/iTerm 安装依赖并复制配置文件。
+2. 首次启动时授权麦克风权限；如使用 `--debug` 手动唤醒，再授权“辅助功能”。
+3. 运行 `python -m audio.device` 查看设备；如外接声卡/麦克风没有被默认选中，把设备编号写入 `audio.input_device` / `audio.output_device`。
+4. Apple Silicon 上如个别依赖安装异常，确认使用原生 arm64 Python 3.11，而不是 Rosetta 下的 x86_64 Python。
 
 ## 对话模式
 
@@ -161,8 +222,10 @@ voxclaw/
 
 ## 常见问题
 
-- **没有声音输入**：检查系统设置 → 隐私与安全性 → 麦克风，确认终端已授权。
+- **没有声音输入**：macOS 检查“隐私与安全性 → 麦克风”；Windows 检查“隐私和安全性 → 麦克风”并允许桌面应用访问。
+- **音频设备选错**：运行 `python -m audio.device`，把正确设备编号填到 `audio.input_device` / `audio.output_device`。
 - **唤醒词无反应**：`--debug` 查看分数，适当调低 `wakeword.threshold`。
-- **手动唤醒热键无反应**：确认使用 `python app.py --debug` 启动，并给终端授权“隐私与安全性 → 辅助功能”。
+- **手动唤醒热键无反应**：确认使用 `python app.py --debug` 启动；macOS 给终端授权“辅助功能”，Windows 可把热键改成 `<ctrl>+<alt>+i`。
+- **Windows 依赖安装失败**：确认使用 Python 3.11 64-bit，并先升级 `pip`；不要复用 macOS 下的 `.venv`。
 - **首次启动慢**：openWakeWord 需下载基础模型，属正常现象。
 - **LLM 连接失败**：`llm.provider: openclaw` 时需确认本地 Gateway 已启动且开启了 chat completions 接口（`gateway.http.endpoints.chatCompletions.enabled: true`）；也可临时切到 `stepfun` 直连。

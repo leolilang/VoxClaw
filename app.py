@@ -18,6 +18,7 @@ from stt.step_stt import StepSTT
 from tts.step_tts import StepTTS
 from tts.step_tts_ws import StepTTSWebSocket
 from utils.logger import setup_logger
+from utils.platform_info import log_runtime_environment
 from vad.recorder import VADRecorder
 from vad.silero import SileroVAD
 from wakeword.detector import WakeWordDetector
@@ -30,6 +31,7 @@ async def main(config_path: str | None, debug: bool = False):
     if not settings.step.api_key:
         logger.warning("未配置 Step API Key（config.yaml 的 step.api_key 或环境变量 STEP_API_KEY），STT/TTS 将无法工作")
 
+    log_runtime_environment()
     log_default_devices()
 
     mic = MicrophoneRecorder(settings.audio)

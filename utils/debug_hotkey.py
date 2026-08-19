@@ -1,6 +1,7 @@
 """DEBUG 模式下的手动唤醒热键监听。"""
 
 import asyncio
+import platform
 from typing import Callable
 
 from loguru import logger
@@ -42,6 +43,10 @@ class ManualWakeHotkey:
         except Exception as exc:
             self._listener = None
             logger.warning("DEBUG 手动唤醒热键启动失败：{}", exc)
+            if platform.system() == "Darwin":
+                logger.warning("macOS 请给当前终端授权：系统设置 -> 隐私与安全性 -> 辅助功能")
+            elif platform.system() == "Windows":
+                logger.warning("Windows 如热键被占用，可在 config.yaml 中改为 `<ctrl>+<alt>+i`")
             return
         logger.info("DEBUG 手动唤醒已启用：按 {} 跳过唤醒词", self._hotkey)
 

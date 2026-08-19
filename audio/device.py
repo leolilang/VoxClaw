@@ -43,4 +43,36 @@ def log_default_devices():
 
 
 if __name__ == "__main__":
-    print(sd.query_devices())
+    print("Host APIs:")
+    for index, api in enumerate(sd.query_hostapis()):
+        print(f"  [{index}] {api['name']}")
+
+    try:
+        default_input = sd.query_devices(kind="input")["name"]
+    except Exception:
+        default_input = None
+    try:
+        default_output = sd.query_devices(kind="output")["name"]
+    except Exception:
+        default_output = None
+
+    print("\nDevices:")
+    for index, device in enumerate(sd.query_devices()):
+        roles = []
+        if device["max_input_channels"] > 0:
+            roles.append("input")
+        if device["max_output_channels"] > 0:
+            roles.append("output")
+        if not roles:
+            continue
+        marks = []
+        if device["name"] == default_input and "input" in roles:
+            marks.append("default input")
+        if device["name"] == default_output and "output" in roles:
+            marks.append("default output")
+        suffix = f" ({', '.join(marks)})" if marks else ""
+        print(
+            f"  [{index}] {device['name']} | {', '.join(roles)} | "
+            f"in={device['max_input_channels']} out={device['max_output_channels']} | "
+            f"default_sr={device['default_samplerate']:.0f}{suffix}"
+        )
