@@ -19,6 +19,7 @@ from tts.step_tts import StepTTS
 from tts.step_tts_ws import StepTTSWebSocket
 from utils.timer import Timer
 from utils.text_utils import clean_for_tts, is_exit_command
+from utils.debug_hotkey import ManualWakeHotkey
 from vad.recorder import VADRecorder
 from wakeword.detector import WakeWordDetector
 
@@ -37,6 +38,7 @@ class VoicePipeline:
         llm: OpenClawClient,
         tts: StepTTS,
         tts_ws: StepTTSWebSocket | None = None,
+        debug: bool = False,
     ):
         self._settings = settings
         self._mic = mic
@@ -50,10 +52,13 @@ class VoicePipeline:
         self._state = StateMachine()
         self._session = Session()
         self._running = False
+        self._manual_wake = ManualWakeHotkey(settings.debug.manual_wake_hotkey) if debug else None
 
     async def run(self):
         self._running = True
         self._mic.start()
+        if self._manual_wake is not None:
+            self._manual_wake.start()
         conv = self._settings.conversation
         logger.info(
             "VoxClaw 已就绪（{}对话模式），等待唤醒词...",
@@ -74,11 +79,33 @@ class VoicePipeline:
                 finally:
                     self._back_to_idle()
         finally:
+            if self._manual_wake is not None:
+                self._manual_wake.stop()
             self._mic.stop()
 
     async def _wait_for_wakeword(self):
+        if self._manual_wake is None:
+            while self._running:
+                frame = await self._mic.get_frame()
+                if self._wakeword.process(frame):
+                    return
+
         while self._running:
-            frame = await self._mic.get_frame()
+            mic_task = asyncio.create_task(self._mic.get_frame())
+            hotkey_task = asyncio.create_task(self._manual_wake.event.wait())
+            done, pending = await asyncio.wait(
+                {mic_task, hotkey_task}, return_when=asyncio.FIRST_COMPLETED
+            )
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+
+            if hotkey_task in done:
+                self._manual_wake.event.clear()
+                logger.info("DEBUG 手动唤醒触发，跳过唤醒词检测")
+                return
+
+            frame = mic_task.result()
             if self._wakeword.process(frame):
                 return
 
@@ -104,8 +131,8 @@ class VoicePipeline:
 
             try:
                 exit_requested = await self._respond(audio)
-            except Exception:
-                logger.exception("本轮回答失败，保持对话等待重说")
+            except Exception as exc:
+                logger.warning("本轮回答失败，保持对话等待重说：{}", exc)
                 self._player.stop()
                 await self._play_asset("error.wav")
                 follow_up = True  # 出错不退出会话，等待用户重新提问，直到超时或退出指令

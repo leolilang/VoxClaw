@@ -29,6 +29,14 @@ class OpenClawClient:
             "/v1/chat/completions",
             json={"model": self._config.model, "messages": messages},
         )
+        if resp.status_code >= 400:
+            logger.warning(
+                "LLM 请求失败 [{}] model={} endpoint={}: {}",
+                resp.status_code,
+                self._config.model,
+                self._config.endpoint,
+                resp.text[:500],
+            )
         resp.raise_for_status()
         reply = (resp.json()["choices"][0]["message"]["content"] or "").strip()
         logger.info("OpenClaw 回复 ({:.0f} ms): {!r}", timer.elapsed_ms(), reply)
