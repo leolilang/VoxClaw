@@ -39,6 +39,10 @@ class ConversationConfig(BaseModel):
     exit_words: list[str] = ["关闭", "退下", "关机", "停止", "退出", "再见", "闭嘴", "休眠"]
 
 
+class DebugConfig(BaseModel):
+    manual_wake_hotkey: str = "<shift>+<ctrl>+i"
+
+
 class StepConfig(BaseModel):
     api_key: str = ""
     stt_endpoint: str = "https://api.stepfun.com/v1/audio/transcriptions"
@@ -65,7 +69,7 @@ class LLMConfig(BaseModel):
         endpoint="https://api.stepfun.com", model="step-3.5-flash"
     )
     deepseek: LLMEndpointConfig = LLMEndpointConfig(
-        endpoint="https://api.deepseek.com", model="DeepSeek-V4-Flash-0731"
+        endpoint="https://api.deepseek.com", model="deepseek-chat"
     )
 
 
@@ -93,6 +97,7 @@ class Settings(BaseModel):
     wakeword: WakeWordConfig = WakeWordConfig()
     vad: VADConfig = VADConfig()
     conversation: ConversationConfig = ConversationConfig()
+    debug: DebugConfig = DebugConfig()
     step: StepConfig = StepConfig()
     llm: LLMConfig = LLMConfig()
     tts: TTSConfig = TTSConfig()

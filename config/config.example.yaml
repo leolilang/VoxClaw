@@ -24,6 +24,11 @@ conversation:
   # 退出指令词：说这些词（完全匹配，或不超过6字的短句包含）即结束对话回待机
   exit_words: ["关闭", "退下", "关机", "停止", "退出", "再见", "闭嘴", "休眠", "拜拜"]
 
+debug:
+  # 仅在 python app.py --debug 时启用；按下后跳过唤醒词，直接进入录音/STT/LLM/TTS 链路
+  # macOS 首次使用全局热键可能需要给终端授权：系统设置 -> 隐私与安全性 -> 辅助功能
+  manual_wake_hotkey: "<shift>+<ctrl>+i"
+
 step:
   api_key: ""            # 也可通过环境变量 STEP_API_KEY 设置
   stt_endpoint: https://api.stepfun.com/v1/audio/transcriptions
@@ -47,7 +52,7 @@ llm:
   deepseek:
     endpoint: https://api.deepseek.com
     api_key: ""            # 也可通过环境变量 DEEPSEEK_API_KEY 设置
-    model: DeepSeek-V4-Flash-0731
+    model: deepseek-chat   # DeepSeek 官方 OpenAI 兼容模型名；推理模型可改为 deepseek-reasoner
 
 tts:
   # StepFun 音色 ID，如 wenrounvsheng(温柔女声) / cixingnansheng(磁性男声) / linjiajiejie(邻家姐姐)

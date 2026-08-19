@@ -23,9 +23,9 @@ from vad.silero import SileroVAD
 from wakeword.detector import WakeWordDetector
 
 
-async def main(config_path: str | None):
+async def main(config_path: str | None, debug: bool = False):
     settings = load_settings(config_path)
-    logger = setup_logger()
+    logger = setup_logger("DEBUG" if debug else "INFO")
 
     if not settings.step.api_key:
         logger.warning("未配置 Step API Key（config.yaml 的 step.api_key 或环境变量 STEP_API_KEY），STT/TTS 将无法工作")
@@ -54,7 +54,7 @@ async def main(config_path: str | None):
     else:
         logger.info("TTS 使用 HTTP 整段模式（transport: http）")
 
-    pipeline = VoicePipeline(settings, mic, player, wakeword, vad_recorder, stt, llm, tts, tts_ws)
+    pipeline = VoicePipeline(settings, mic, player, wakeword, vad_recorder, stt, llm, tts, tts_ws, debug=debug)
     try:
         await pipeline.run()
     finally:
@@ -67,11 +67,8 @@ if __name__ == "__main__":
     parser.add_argument("--debug", action="store_true", help="输出 DEBUG 级别日志")
     args = parser.parse_args()
 
-    if args.debug:
-        setup_logger("DEBUG")
-
     try:
-        asyncio.run(main(args.config))
+        asyncio.run(main(args.config, debug=args.debug))
     except KeyboardInterrupt:
         print("\nVoxClaw 已退出")
         sys.exit(0)

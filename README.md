@@ -10,6 +10,7 @@
 - **流式 TTS 低延迟**：WebSocket 边合成边播放，首块音频约 1.6s 出声（HTTP 整段模式可切回）
 - **多轮对话**：回答完继续监听追问（默认 10s），无需重复喊唤醒词
 - **语音退出指令**：多轮对话中说"退下 / 关闭 / 停止"等词即回待机，指令词可配置
+- **DEBUG 手动唤醒**：`--debug` 下可用 `Shift+Control+I` 跳过唤醒词，验证录音、STT、LLM、TTS 链路
 
 ## 系统状态机
 
@@ -82,11 +83,13 @@ python -m audio.device
 
 ```bash
 python app.py            # 正常运行
-python app.py --debug    # DEBUG 日志
+python app.py --debug    # DEBUG 日志 + 手动唤醒热键
 python app.py --config 其他配置.yaml
 ```
 
 启动后对着麦克风说唤醒词（默认 "Hey Jarvis"），听到提示音后说出问题即可。按 `Ctrl+C` 退出。
+
+`--debug` 模式下也可以按 `Shift+Control+I` 手动触发唤醒：程序会跳过 openWakeWord 检测，直接播放唤醒提示音并进入录音，从而验证后续 STT、AI 回复和 TTS。该热键由 `debug.manual_wake_hotkey` 配置；macOS 首次使用全局热键时，可能需要在系统设置的“隐私与安全性 → 辅助功能”中授权当前终端。
 
 ## 对话模式
 
@@ -146,7 +149,9 @@ voxclaw/
 | `conversation.mode` | multi | 单轮 / 多轮对话 |
 | `conversation.follow_up_timeout_s` | 10.0 | 多轮模式等待追问时长 |
 | `conversation.exit_words` | 关闭/退下/停止... | 语音退出指令词列表 |
+| `debug.manual_wake_hotkey` | `<shift>+<ctrl>+i` | `--debug` 模式下跳过唤醒词的手动唤醒热键 |
 | `llm.provider` | openclaw | LLM 后端：openclaw / stepfun / deepseek |
+| `llm.deepseek.model` | deepseek-chat | DeepSeek 官方 OpenAI 兼容模型名，可改为 deepseek-reasoner |
 | `tts.voice` | wenrounvsheng | 合成音色（wenrounvsheng / cixingnansheng / linjiajiejie 等） |
 | `tts.transport` | websocket | TTS 传输：websocket 流式 / http 整段 |
 
@@ -154,5 +159,6 @@ voxclaw/
 
 - **没有声音输入**：检查系统设置 → 隐私与安全性 → 麦克风，确认终端已授权。
 - **唤醒词无反应**：`--debug` 查看分数，适当调低 `wakeword.threshold`。
+- **手动唤醒热键无反应**：确认使用 `python app.py --debug` 启动，并给终端授权“隐私与安全性 → 辅助功能”。
 - **首次启动慢**：openWakeWord 需下载基础模型，属正常现象。
 - **LLM 连接失败**：`llm.provider: openclaw` 时需确认本地 Gateway 已启动且开启了 chat completions 接口（`gateway.http.endpoints.chatCompletions.enabled: true`）；也可临时切到 `stepfun` 直连。

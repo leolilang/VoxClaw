@@ -25,6 +25,9 @@ class StepSTT:
             data={"model": self._config.stt_model, "response_format": "json"},
         )
         if resp.status_code >= 400:
+            if resp.status_code == 400 and "no speech found" in resp.text.lower():
+                logger.info("STT 未检测到语音 ({:.0f} ms)，跳过本轮", timer.elapsed_ms())
+                return ""
             logger.error("STT 请求失败 [{}]: {}", resp.status_code, resp.text[:500])
         resp.raise_for_status()
         text = (resp.json().get("text") or "").strip()
