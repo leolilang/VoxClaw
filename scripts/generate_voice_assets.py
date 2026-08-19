@@ -1,10 +1,10 @@
-"""用 Step TTS 生成语音提示音（使用 config.yaml 中的音色）。
+"""用 Step TTS 生成语音提示音（使用 config.yaml 中的音色与文案）。
 
 生成:
-    assets/greeting.wav  启动问候: hi，我是贾维斯，有什么需要随时喊我。
-    assets/wake.wav      唤醒应答: 我在。
-    assets/error.wav     识别失败: 我没有听清楚，请重新说一遍。
-    assets/sleep.wav     退出应答: 好的，有需要再喊我。
+    assets/greeting.wav  启动问候
+    assets/wake.wav      唤醒应答
+    assets/error.wav     识别失败
+    assets/sleep.wav     退出应答
 
 用法: python scripts/generate_voice_assets.py [--config config/config.yaml]
 """
@@ -21,22 +21,24 @@ from config.settings import load_settings
 
 ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
 
-PROMPTS = {
-    "greeting.wav": "hi，我是贾维斯，有什么需要随时喊我。",
-    "wake.wav": "我在。",
-    "error.wav": "我没有听清楚，请重新说一遍。",
-    "sleep.wav": "好的，有需要再喊我。",
-}
-
 
 def main(config_path: str | None):
     settings = load_settings(config_path)
     if not settings.step.api_key:
         sys.exit("未配置 step.api_key，无法调用 TTS")
+    prompts = {
+        "greeting.wav": settings.prompts.voice_assets.greeting,
+        "wake.wav": settings.prompts.voice_assets.wake,
+        "error.wav": settings.prompts.voice_assets.error,
+        "sleep.wav": settings.prompts.voice_assets.sleep,
+    }
 
     ASSETS_DIR.mkdir(exist_ok=True)
     with httpx.Client(timeout=60.0) as client:
-        for name, text in PROMPTS.items():
+        for name, text in prompts.items():
+            if not text:
+                print(f"跳过 {name}：未配置 prompts.voice_assets 文案")
+                continue
             resp = client.post(
                 settings.step.tts_endpoint,
                 headers={"Authorization": f"Bearer {settings.step.api_key}"},

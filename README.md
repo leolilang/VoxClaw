@@ -42,10 +42,10 @@ pip install -r requirements.txt
 
 ```bash
 python scripts/generate_assets.py         # 音效版兜底（无需 API Key）
-python scripts/generate_voice_assets.py   # 语音版（用 config 中的音色合成，需 step.api_key）
+python scripts/generate_voice_assets.py   # 语音版（用 config 中的音色和文案合成，需 step.api_key）
 ```
 
-语音版提示音内容：
+语音版提示音内容由 `config.yaml` 的 `prompts.voice_assets` 控制：
 
 | 文件 | 时机 | 内容 |
 | --- | --- | --- |
@@ -54,7 +54,7 @@ python scripts/generate_voice_assets.py   # 语音版（用 config 中的音色�
 | error.wav | 识别失败/模型出错 | 我没有听清楚，请重新说一遍。 |
 | sleep.wav | 收到退出指令 | 好的，有需要再喊我。 |
 
-改了 `tts.voice` 音色后重新执行 `generate_voice_assets.py` 即可换声。
+改了 `tts.voice` 音色或 `prompts.voice_assets` 文案后，重新执行 `generate_voice_assets.py` 即可更新提示音。
 
 ### 4. 配置
 
@@ -65,6 +65,8 @@ cp config/config.example.yaml config/config.yaml   # 首次使用先复制模板
 编辑 `config/config.yaml`：
 
 - `step.api_key`：Step API 密钥（也可用环境变量 `STEP_API_KEY`），用于 STT/TTS
+- `prompts.system`：LLM 系统提示词，用于控制助手人设、回答风格和长度
+- `prompts.voice_assets`：提示音生成文案，修改后需重新运行 `python scripts/generate_voice_assets.py`
 - `llm.provider`：LLM 后端
   - `openclaw`：本地 OpenClaw Gateway（`llm.openclaw.endpoint` 默认 `http://127.0.0.1:18789`，`api_key` 填 gateway.auth.token）
   - `stepfun`：Step API 直连（`api_key` 留空则复用 `step.api_key`）
@@ -150,6 +152,8 @@ voxclaw/
 | `conversation.follow_up_timeout_s` | 10.0 | 多轮模式等待追问时长 |
 | `conversation.exit_words` | 关闭/退下/停止... | 语音退出指令词列表 |
 | `debug.manual_wake_hotkey` | `<shift>+<ctrl>+i` | `--debug` 模式下跳过唤醒词的手动唤醒热键 |
+| `prompts.system` | VoxClaw 语音助手... | LLM 系统提示词 |
+| `prompts.voice_assets.*` | greeting/wake/error/sleep | 提示音生成文案 |
 | `llm.provider` | openclaw | LLM 后端：openclaw / stepfun / deepseek |
 | `llm.deepseek.model` | deepseek-chat | DeepSeek 官方 OpenAI 兼容模型名，可改为 deepseek-reasoner |
 | `tts.voice` | wenrounvsheng | 合成音色（wenrounvsheng / cixingnansheng / linjiajiejie 等） |

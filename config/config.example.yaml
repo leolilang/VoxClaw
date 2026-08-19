@@ -1,63 +1,114 @@
+# VoxClaw 主配置文件。
+# 修改后重新运行 `python app.py` 生效；如果只改提示音文案/音色，还需要重新运行 `python scripts/generate_voice_assets.py` 生成 assets/*.wav。
+
 audio:
+  # 麦克风采样率；openWakeWord 和 Silero VAD 建议使用 16000，不建议随意修改。
   sample_rate: 16000
+  # 音频通道数；1 表示单声道，当前录音与 VAD 流程按单声道设计。
   channels: 1
+  # 每次从麦克风读取的帧大小；512 适配当前 VAD/唤醒检测延迟与稳定性。
   block_size: 512
-  input_device: null   # null = 系统默认输入设备，可用 `python -m audio.device` 查看设备列表
+  # 输入设备；null 表示系统默认麦克风，也可填 `python -m audio.device` 输出的设备编号或名称。
+  input_device: null
+  # 输出设备；null 表示系统默认扬声器/耳机，也可填 `python -m audio.device` 输出的设备编号或名称。
   output_device: null
 
 wakeword:
-  # 内置模型名（如 hey_jarvis / alexa），或放置于 wakeword/hotwords/ 下的自训练 .onnx 文件名（如 hey_kiwi.onnx）
-  model: hey_jarvis
-  threshold: 0.25   # 唤醒不灵敏调低（如 0.25），误唤醒多调高；可用 python scripts/test_wakeword.py 实测分数
+  # 唤醒词模型；可填内置模型名（如 hey_jarvis / alexa），或 wakeword/hotwords/ 下自训练 .onnx 文件名。
+  model: "hey_jarvis"
+  # 唤醒阈值；越低越灵敏但越容易误唤醒，越高越严格；可用 `python scripts/test_wakeword.py` 实测分数。
+  threshold: 0.25
+  # 唤醒冷却时间（秒）；一次唤醒后多少秒内忽略重复触发，避免连续误触发。
   cooldown_s: 2.0
 
 vad:
+  # 语音活动检测阈值；越低越容易判定为说话，越高越能过滤噪音但可能漏掉轻声。
   threshold: 0.55
-  silence_ms: 500        # 静音多久判定说话结束
-  speech_timeout_s: 6.0  # 唤醒后等待开口的最长时间
-  max_record_s: 15.0     # 单次录音最长时长
-  pre_roll_ms: 300       # 说话起点前保留的音频，避免吞字
+  # 静音判停时间（毫秒）；说话后连续静音达到该时长就结束本轮录音。
+  silence_ms: 500
+  # 首次唤醒后等待用户开口的最长时间（秒）；超时则回到待机。
+  speech_timeout_s: 6.0
+  # 单次录音最大时长（秒）；超过后强制结束，防止长时间占用流程。
+  max_record_s: 15.0
+  # 预录音时长（毫秒）；保留检测到语音前的一小段音频，避免吞掉开头的字。
+  pre_roll_ms: 300
 
 conversation:
-  mode: multi              # single=单轮（答完回待机）/ multi=多轮（答完继续听追问，无需再喊唤醒词）
-  follow_up_timeout_s: 10.0  # 多轮模式下等待追问的时长，超时回待机
-  # 退出指令词：说这些词（完全匹配，或不超过6字的短句包含）即结束对话回待机
-  exit_words: ["关闭", "退下", "关机", "停止", "退出", "再见", "闭嘴", "休眠", "拜拜"]
+  # 对话模式；single=回答一次后回待机，multi=回答后继续等待追问，无需再次唤醒。
+  mode: "multi"
+  # 多轮模式下等待追问的时长（秒）；超时未说话则结束会话并回待机。
+  follow_up_timeout_s: 10.0
+  # 语音退出指令；STT 文本命中这些短词时播放 sleep 提示音并结束当前会话。
+  exit_words: ["关闭", "退下", "关机", "停止", "退出", "再见", "闭嘴", "休眠", "拜拜", "Bye bye", "拜拜了您", "拜拜了您嘞", "拜拜了您嘞！", "拜拜了您嘞！再见", "拜拜了您嘞！再见！", "拜拜了您嘞！再见啦", "拜拜了您嘞！再见啦！", "拜拜了您嘞！再见啦！再见啦", "Bye bye啦", "Bye bye啦！", "Bye bye啦！再见啦", "Bye bye啦！再见啦！"]
 
 debug:
-  # 仅在 python app.py --debug 时启用；按下后跳过唤醒词，直接进入录音/STT/LLM/TTS 链路
-  # macOS 首次使用全局热键可能需要给终端授权：系统设置 -> 隐私与安全性 -> 辅助功能
+  # DEBUG 手动唤醒热键；仅 `python app.py --debug` 启用，按下后跳过唤醒词直接进入录音/STT/LLM/TTS 链路。
+  # macOS 首次使用全局热键可能需要授权：系统设置 -> 隐私与安全性 -> 辅助功能；Windows 可按需改为 `<ctrl>+<alt>+i`。
   manual_wake_hotkey: "<shift>+<ctrl>+i"
 
+prompts:
+  # LLM 系统提示词；用于控制助手人设、回复风格、长度和禁用 Markdown 等行为。
+  system: "你是 VoxClaw 语音助手。回答要简洁口语化，适合语音播报，控制在三句话以内，不要使用 Markdown 格式。"
+  # 提示音文案；修改后运行 `python scripts/generate_voice_assets.py` 重新生成对应 assets/*.wav。
+  voice_assets:
+    # 服务启动时播放的问候语，对应 assets/greeting.wav。
+    greeting: "hi，我是贾维斯，有什么需要随时喊我。"
+    # 唤醒成功后播放的回应语，对应 assets/wake.wav。
+    wake: "我在。"
+    # 识别失败、模型异常等场景播放的提示语，对应 assets/error.wav。
+    error: "我没有听清楚，请重新说一遍。"
+    # 收到退出指令后播放的休眠提示语，对应 assets/sleep.wav。
+    sleep: "好的，有需要再喊我。"
+
 step:
-  api_key: ""            # 也可通过环境变量 STEP_API_KEY 设置
-  stt_endpoint: https://api.stepfun.com/v1/audio/transcriptions
-  tts_endpoint: https://api.stepfun.com/v1/audio/speech
-  stt_model: step-asr
-  tts_model: step-tts-mini
+  # Step API Key；用于 STT 和 TTS。建议生产环境使用环境变量 STEP_API_KEY 或 VOXCLAW_STEP_API_KEY 覆盖，模板文件请保持为空。
+  api_key: ""
+  # Step STT 接口地址；通常保持默认即可。
+  stt_endpoint: "https://api.stepfun.com/v1/audio/transcriptions"
+  # Step TTS HTTP 接口地址；transport=http 时使用，也用于生成提示音。
+  tts_endpoint: "https://api.stepfun.com/v1/audio/speech"
+  # STT 模型名；Step 语音识别默认使用 step-asr。
+  stt_model: "step-asr"
+  # TTS 模型名；HTTP 和 WebSocket TTS 都会使用该模型参数。
+  tts_model: "step-tts-mini"
 
 llm:
-  provider: stepfun     # openclaw=本地 OpenClaw Gateway（贾维斯）/ stepfun=Step API 直连（更快）/ deepseek=DeepSeek API
+  # LLM 后端选择；openclaw=本地 OpenClaw Gateway，stepfun=Step API 直连，deepseek=DeepSeek API。
+  provider: "deepseek"
+  # LLM 请求超时时间（秒）；网络慢或本地模型慢时可适当调大。
   timeout_s: 60.0
+  # 发送给 LLM 的历史消息数量上限；越大上下文越完整，但请求越慢、token 消耗越高。
   max_history: 20
-  system_prompt: 你是 VoxClaw 语音助手。回答要简洁口语化，适合语音播报，控制在三句话以内，不要使用 Markdown 格式。
   openclaw:
-    endpoint: http://127.0.0.1:18789
-    api_key: ""   # OpenClaw gateway.auth.token
-    model: openclaw
+    # OpenClaw Gateway 地址；使用本地贾维斯/OpenClaw 服务时保持默认或改为你的网关地址。
+    endpoint: "http://127.0.0.1:18789"
+    # OpenClaw Gateway 鉴权 token；对应 gateway.auth.token，可用环境变量 OPENCLAW_API_KEY 覆盖。
+    api_key: ""
+    # OpenClaw Gateway 暴露的模型名；通常保持 openclaw。
+    model: "openclaw"
   stepfun:
-    endpoint: https://api.stepfun.com
-    api_key: ""            # 留空则复用上面 step.api_key
-    model: step-3.5-flash
+    # Step OpenAI 兼容接口地址；provider=stepfun 时使用。
+    endpoint: "https://api.stepfun.com"
+    # Step LLM API Key；留空会自动复用上面的 step.api_key。
+    api_key: ""
+    # Step LLM 模型名；可按 Step 官方支持模型调整。
+    model: "step-3.5-flash"
   deepseek:
-    endpoint: https://api.deepseek.com
-    api_key: ""            # 也可通过环境变量 DEEPSEEK_API_KEY 设置
-    model: deepseek-chat   # DeepSeek 官方 OpenAI 兼容模型名；推理模型可改为 deepseek-reasoner
+    # DeepSeek OpenAI 兼容接口地址；provider=deepseek 时使用。
+    endpoint: "https://api.deepseek.com"
+    # DeepSeek API Key；也可通过环境变量 DEEPSEEK_API_KEY 设置，模板文件请保持为空。
+    api_key: ""
+    # DeepSeek 模型名；deepseek-chat 适合普通对话，deepseek-reasoner 适合推理但延迟更高。
+    model: "deepseek-chat"
 
 tts:
-  # StepFun 音色 ID，如 wenrounvsheng(温柔女声) / cixingnansheng(磁性男声) / linjiajiejie(邻家姐姐)
-  voice: linjiajiejie
-  speed: 1.0
-  transport: websocket   # websocket=流式低延迟（边合成边播） / http=整段合成后播放（效果不好可切回）
-  ws_endpoint: wss://api.stepfun.com/v1/realtime/audio
+  # Step TTS 音色 ID；如 wenrounvsheng(温柔女声) / cixingnansheng(磁性男声) / linjiajiejie(邻家姐姐)。
+  voice: "linjiajiejie"
+  # 语速倍率；1.0 为正常速度，大于 1 更快，小于 1 更慢。
+  speed: 1.2
+  # TTS 传输方式；websocket=流式低延迟边合成边播，http=整段合成完成后播放。
+  transport: "websocket"
+  # Step TTS WebSocket 地址；transport=websocket 时使用。
+  ws_endpoint: "wss://api.stepfun.com/v1/realtime/audio"
+  # WebSocket TTS 输出采样率；需与 Step TTS 返回音频配置匹配，通常保持 24000。
   ws_sample_rate: 24000

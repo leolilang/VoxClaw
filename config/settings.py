@@ -43,6 +43,18 @@ class DebugConfig(BaseModel):
     manual_wake_hotkey: str = "<shift>+<ctrl>+i"
 
 
+class VoiceAssetPrompts(BaseModel):
+    greeting: str = ""
+    wake: str = ""
+    error: str = ""
+    sleep: str = ""
+
+
+class PromptsConfig(BaseModel):
+    system: str = ""
+    voice_assets: VoiceAssetPrompts = VoiceAssetPrompts()
+
+
 class StepConfig(BaseModel):
     api_key: str = ""
     stt_endpoint: str = "https://api.stepfun.com/v1/audio/transcriptions"
@@ -61,7 +73,7 @@ class LLMConfig(BaseModel):
     provider: str = "openclaw"  # openclaw=本地 OpenClaw Gateway / stepfun=Step API 直连 / deepseek=DeepSeek API
     timeout_s: float = 60.0
     max_history: int = 20
-    system_prompt: str = "你是 VoxClaw 语音助手。回答要简洁口语化，适合语音播报。"
+    system_prompt: str = ""  # 兼容旧配置；新配置请使用 prompts.system
     openclaw: LLMEndpointConfig = LLMEndpointConfig(
         endpoint="http://127.0.0.1:18789", model="openclaw"
     )
@@ -98,6 +110,7 @@ class Settings(BaseModel):
     vad: VADConfig = VADConfig()
     conversation: ConversationConfig = ConversationConfig()
     debug: DebugConfig = DebugConfig()
+    prompts: PromptsConfig = PromptsConfig()
     step: StepConfig = StepConfig()
     llm: LLMConfig = LLMConfig()
     tts: TTSConfig = TTSConfig()
@@ -115,7 +128,7 @@ class Settings(BaseModel):
             model=ep.model,
             timeout_s=self.llm.timeout_s,
             max_history=self.llm.max_history,
-            system_prompt=self.llm.system_prompt,
+            system_prompt=self.prompts.system or self.llm.system_prompt,
         )
 
 
