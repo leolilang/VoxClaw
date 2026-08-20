@@ -10,7 +10,7 @@ audio: # 音频采集/播放配置
 
 wakeword: # 唤醒词检测配置
   model: "hey_jarvis" # 唤醒词模型；可填内置模型名（hey_jarvis / alexa），或 wakeword/hotwords/ 下自训练 .onnx 文件名
-  threshold: 0.25 # 唤醒阈值；越低越灵敏但越容易误唤醒，越高越严格；可用 `python scripts/test_wakeword.py` 实测
+  threshold: 0.4 # 唤醒阈值；越低越灵敏但越容易误唤醒，越高越严格；可用 `python scripts/test_wakeword.py` 实测
   cooldown_s: 2.0 # 唤醒冷却时间（秒）；一次唤醒后多少秒内忽略重复触发，避免连续误触发
 
 vad: # 语音活动检测配置，用于判断用户何时开始/结束说话
@@ -29,12 +29,38 @@ debug: # DEBUG/调试配置
   manual_wake_hotkey: "<shift>+<ctrl>+i" # DEBUG 手动唤醒热键；仅 `python app.py --debug` 启用；macOS 需辅助功能权限，Windows 可改为 `<ctrl>+<alt>+i`
 
 prompts: # 提示词与提示音文案配置
-  system: "你是 VoxClaw 语音助手。回答要简洁口语化，适合语音播报，控制在三句话以内，不要使用 Markdown 格式。" # LLM 系统提示词；用于控制助手人设、回复风格、长度和禁用 Markdown 等行为
+  system: "你是 VoxClaw 语音助手。回答要简洁口语化，适合语音播报，控制在三到五句话以内，不要使用 Markdown 格式。" # LLM 系统提示词；用于控制助手人设、回复风格、长度和禁用 Markdown 等行为
   voice_assets: # 提示音文案；修改后运行 `python scripts/generate_voice_assets.py` 重新生成对应 assets/*.wav
     greeting: "hi，我是贾维斯，有什么需要随时喊我。" # 服务启动时播放的问候语，对应 assets/greeting.wav
     wake: "我在。" # 唤醒成功后播放的回应语，对应 assets/wake.wav
     error: "我没有听清楚，请重新说一遍。" # 识别失败、模型异常等场景播放的提示语，对应 assets/error.wav
     sleep: "好的，有需要再喊我。" # 收到退出指令后播放的休眠提示语，对应 assets/sleep.wav
+
+tools: # 外部工具总开关；用于天气、新闻、提醒等实时/本地工具能力
+  enabled: true # 是否启用工具层；false 时所有问题都直接走普通 LLM
+
+tavily: # Tavily REST API 配置；当前用于实时天气搜索，后续也可用于新闻/热点
+  enabled: true # 是否启用 Tavily；需要同时配置 api_key 或环境变量 TAVILY_API_KEY
+  api_key: "" # Tavily API Key；建议使用环境变量 TAVILY_API_KEY 或 VOXCLAW_TAVILY_API_KEY，模板文件请保持为空
+  endpoint: "https://api.tavily.com/search" # Tavily Search API 地址；通常保持默认即可
+  search_depth: "basic" # 搜索深度；basic 更快更省额度，advanced 更深入但更慢更耗额度
+  max_results: 5 # 每次搜索返回结果数量；天气查询 3-5 条通常够用
+  timeout_s: 10.0 # Tavily 请求超时时间（秒）；网络较慢可适当调大
+
+doubao_search: # 豆包搜索 API 配置；国内网络下可作为 Tavily 的替代搜索源
+  enabled: true # 是否启用豆包搜索；weather.provider=doubao 时需要开启
+  api_key: "" # 豆包搜索 API Key；建议使用环境变量 DOUBAO_SEARCH_API_KEY 或 VOLCENGINE_SEARCH_API_KEY，模板文件请保持为空
+  endpoint: "https://open.feedcoopapi.com/search_api/global_search" # 豆包搜索 Global Search API 地址；通常保持默认即可
+  doc_count: 5 # 每次搜索返回文档数量；天气查询 3-5 条通常够用
+  max_snippet_length: 500 # 每条结果摘要最大长度；越大信息越完整但响应更长
+  max_image_count_per_doc: 0 # 每条结果返回图片数；语音天气播报不需要图片，保持 0 即可
+  timeout_s: 10.0 # 豆包搜索请求超时时间（秒）；网络较慢可适当调大
+
+weather: # 天气查询工具配置；通过搜索 API 获取实时天气网页信息，再由 LLM 总结
+  enabled: true # 是否启用天气工具；命中天气关键词时优先走该工具
+  provider: "doubao" # 天气数据来源；可选 doubao / tavily，国内网络建议 doubao
+  default_location: "上海松江" # 默认天气位置；用户没说城市/区县时使用这里
+  timezone: "Asia/Shanghai" # 查询时区；用于“今天/明天/下午”等相对时间判断
 
 step: # Step API 配置，用于 STT 和 TTS
   api_key: "" # Step API Key；建议生产环境使用环境变量 STEP_API_KEY 或 VOXCLAW_STEP_API_KEY 覆盖，模板文件请保持为空

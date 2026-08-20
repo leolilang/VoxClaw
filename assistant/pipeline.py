@@ -20,6 +20,7 @@ from tts.step_tts_ws import StepTTSWebSocket
 from utils.timer import Timer
 from utils.text_utils import clean_for_tts, is_exit_command
 from utils.debug_hotkey import ManualWakeHotkey
+from tools.weather import WeatherSearchTool, build_weather_summary_prompt
 from vad.recorder import VADRecorder
 from wakeword.detector import WakeWordDetector
 
@@ -53,6 +54,7 @@ class VoicePipeline:
         self._session = Session()
         self._running = False
         self._manual_wake = ManualWakeHotkey(settings.debug.manual_wake_hotkey) if debug else None
+        self._weather_tool = WeatherSearchTool(settings.tavily, settings.doubao_search, settings.weather) if settings.tools.enabled else None
 
     async def run(self):
         self._running = True
@@ -163,7 +165,9 @@ class VoicePipeline:
             return True
 
         asyncio.ensure_future(self._play_asset("thinking.wav"))
-        reply = await self._llm.chat(self._session, text)
+        reply = await self._reply_with_tool_if_needed(text)
+        if reply is None:
+            reply = await self._llm.chat(self._session, text)
         speech_text = clean_for_tts(reply) if reply else ""
         if not speech_text:
             await self._play_asset("error.wav")
@@ -181,6 +185,31 @@ class VoicePipeline:
         logger.info("本轮对话完成，总耗时 {:.1f}s", turn.elapsed_ms() / 1000)
         return False
 
+    async def _reply_with_tool_if_needed(self, text: str) -> str | None:
+        if self._weather_tool is None or not self._weather_tool.matches(text):
+            return None
+        if not self._weather_tool.available:
+            logger.warning("天气查询命中，但 {} 未启用或未配置 API Key", self._weather_tool.provider)
+            reply = "我还没有配置天气查询服务。请在配置里启用天气搜索，并设置对应的 API Key。"
+            self._session.add_user(text)
+            self._session.add_assistant(reply)
+            return reply
+
+        try:
+            data = await self._weather_tool.search(text)
+            prompt = build_weather_summary_prompt(text, data)
+            reply = await self._llm.complete(
+                "你是 VoxClaw 语音助手，负责把实时工具结果整理成简洁、准确、适合语音播报的中文回答。",
+                prompt,
+                label="天气工具总结",
+            )
+            self._session.add_user(text)
+            self._session.add_assistant(reply)
+            return reply
+        except Exception as exc:
+            logger.warning("天气查询失败，回退到普通 LLM：{}", exc)
+            return None
+
     def _back_to_idle(self):
         self._state.to_idle()
         self._mic.clear()  # 丢弃播放期间采集的回声
@@ -197,3 +226,5 @@ class VoicePipeline:
             self._stt.close(), self._llm.close(), self._tts.close(),
             return_exceptions=True,
         )
+        if self._weather_tool is not None:
+            await self._weather_tool.close()

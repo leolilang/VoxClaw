@@ -11,6 +11,7 @@
 - **多轮对话**：回答完继续监听追问（默认 10s），无需重复喊唤醒词
 - **语音退出指令**：多轮对话中说"退下 / 关闭 / 停止"等词即回待机，指令词可配置
 - **DEBUG 手动唤醒**：`--debug` 下可用 `Shift+Control+I` 跳过唤醒词，验证录音、STT、LLM、TTS 链路
+- **实时天气查询**：通过豆包搜索或 Tavily 搜索最新天气信息，再由 LLM 总结成适合语音播报的回答
 
 ## 系统状态机
 
@@ -101,6 +102,9 @@ Copy-Item config\config.example.yaml config\config.yaml
 - `step.api_key`：Step API 密钥（也可用环境变量 `STEP_API_KEY`），用于 STT/TTS
 - `prompts.system`：LLM 系统提示词，用于控制助手人设、回答风格和长度
 - `prompts.voice_assets`：提示音生成文案，修改后需重新运行 `python scripts/generate_voice_assets.py`
+- `doubao_search.api_key`：豆包搜索 API Key，也可用环境变量 `DOUBAO_SEARCH_API_KEY` 或 `VOLCENGINE_SEARCH_API_KEY`；国内网络建议优先使用
+- `tavily.api_key`：Tavily API Key，也可用环境变量 `TAVILY_API_KEY`；可作为备用搜索源
+- `weather.default_location`：默认天气位置，用户没说地点时使用，例如 `上海松江`
 - `llm.provider`：LLM 后端
   - `openclaw`：本地 OpenClaw Gateway（`llm.openclaw.endpoint` 默认 `http://127.0.0.1:18789`，`api_key` 填 gateway.auth.token）
   - `stepfun`：Step API 直连（`api_key` 留空则复用 `step.api_key`）
@@ -128,6 +132,72 @@ python app.py --config 其他配置.yaml
 启动后对着麦克风说唤醒词（默认 "Hey Jarvis"），听到提示音后说出问题即可。按 `Ctrl+C` 退出。
 
 `--debug` 模式下也可以按 `Shift+Control+I` 手动触发唤醒：程序会跳过 openWakeWord 检测，直接播放唤醒提示音并进入录音，从而验证后续 STT、AI 回复和 TTS。该热键由 `debug.manual_wake_hotkey` 配置；macOS 首次使用全局热键时，可能需要在系统设置的“隐私与安全性 → 辅助功能”中授权当前终端。Windows 如遇热键冲突，可改为 `<ctrl>+<alt>+i`。
+
+## 实时天气查询
+
+天气问题会优先走工具层：VoxClaw 使用豆包搜索或 Tavily 搜索最新天气网页信息，再让当前 LLM 总结成口语化回答。国内网络环境建议使用豆包搜索，Tavily 可作为备用。
+
+支持示例：
+
+- “今天天气怎么样？”
+- “现在多少度？”
+- “下午会下雨吗？”
+- “需要带伞吗？”
+- “明天上海松江是什么天气？”
+- “后天下午会下雨吗？”
+- “最近几天会不会降温？”
+
+天气工具会把“今天上午 / 今天下午 / 明天 / 后天 / 大后天 / 最近几天”等相对时间解析成明确日期和时段，再用这些信息搜索天气。若搜索结果只查到全天预报、没有分时段数据，助手会说明分时段信息不够完整，避免编造。
+
+配置方式：
+
+```yaml
+tools:
+  enabled: true
+
+tavily:
+  enabled: true         # 备用搜索源
+  api_key: ""          # 推荐用环境变量 TAVILY_API_KEY
+  search_depth: basic  # basic 更快更省额度
+  max_results: 5
+
+doubao_search:
+  enabled: true
+  api_key: ""          # 推荐用环境变量 DOUBAO_SEARCH_API_KEY 或 VOLCENGINE_SEARCH_API_KEY
+  endpoint: https://open.feedcoopapi.com/search_api/global_search
+  doc_count: 5
+  max_snippet_length: 500
+
+weather:
+  enabled: true
+  provider: doubao     # 可选 doubao / tavily
+  default_location: 上海松江
+  timezone: Asia/Shanghai
+```
+
+如果没有配置所选 provider 对应的 API Key，命中天气问题时会提示未配置天气查询服务。豆包搜索环境变量：
+
+```bash
+export DOUBAO_SEARCH_API_KEY=你的Key
+```
+
+Windows PowerShell：
+
+```powershell
+$env:DOUBAO_SEARCH_API_KEY="你的Key"
+```
+
+Tavily 备用环境变量：
+
+```bash
+export TAVILY_API_KEY=你的Key
+```
+
+Windows PowerShell：
+
+```powershell
+$env:TAVILY_API_KEY="你的Key"
+```
 
 ## Windows 使用指南
 
@@ -215,6 +285,11 @@ voxclaw/
 | `debug.manual_wake_hotkey` | `<shift>+<ctrl>+i` | `--debug` 模式下跳过唤醒词的手动唤醒热键 |
 | `prompts.system` | VoxClaw 语音助手... | LLM 系统提示词 |
 | `prompts.voice_assets.*` | greeting/wake/error/sleep | 提示音生成文案 |
+| `tools.enabled` | true | 是否启用工具层 |
+| `doubao_search.api_key` | 空 | 豆包搜索 API Key，也可用环境变量 `DOUBAO_SEARCH_API_KEY` |
+| `tavily.api_key` | 空 | Tavily API Key，也可用环境变量 `TAVILY_API_KEY` |
+| `weather.provider` | doubao | 天气搜索源：doubao / tavily |
+| `weather.default_location` | 上海松江 | 天气查询默认位置 |
 | `llm.provider` | openclaw | LLM 后端：openclaw / stepfun / deepseek |
 | `llm.deepseek.model` | deepseek-chat | DeepSeek 官方 OpenAI 兼容模型名，可改为 deepseek-reasoner |
 | `tts.voice` | wenrounvsheng | 合成音色（wenrounvsheng / cixingnansheng / linjiajiejie 等） |
@@ -226,6 +301,7 @@ voxclaw/
 - **音频设备选错**：运行 `python -m audio.device`，把正确设备编号填到 `audio.input_device` / `audio.output_device`。
 - **唤醒词无反应**：`--debug` 查看分数，适当调低 `wakeword.threshold`。
 - **手动唤醒热键无反应**：确认使用 `python app.py --debug` 启动；macOS 给终端授权“辅助功能”，Windows 可把热键改成 `<ctrl>+<alt>+i`。
+- **天气查询不可用**：确认 `weather.provider` 对应的搜索源已启用，并配置 `DOUBAO_SEARCH_API_KEY` / `VOLCENGINE_SEARCH_API_KEY` 或 `TAVILY_API_KEY`。
 - **Windows 依赖安装失败**：确认使用 Python 3.11 64-bit，并先升级 `pip`；不要复用 macOS 下的 `.venv`。
 - **首次启动慢**：openWakeWord 需下载基础模型，属正常现象。
 - **LLM 连接失败**：`llm.provider: openclaw` 时需确认本地 Gateway 已启动且开启了 chat completions 接口（`gateway.http.endpoints.chatCompletions.enabled: true`）；也可临时切到 `stepfun` 直连。

@@ -55,6 +55,36 @@ class PromptsConfig(BaseModel):
     voice_assets: VoiceAssetPrompts = VoiceAssetPrompts()
 
 
+class ToolsConfig(BaseModel):
+    enabled: bool = True
+
+
+class TavilyConfig(BaseModel):
+    enabled: bool = False
+    api_key: str = ""
+    endpoint: str = "https://api.tavily.com/search"
+    search_depth: str = "basic"
+    max_results: int = 5
+    timeout_s: float = 10.0
+
+
+class DoubaoSearchConfig(BaseModel):
+    enabled: bool = False
+    api_key: str = ""
+    endpoint: str = "https://open.feedcoopapi.com/search_api/global_search"
+    doc_count: int = 5
+    max_snippet_length: int = 500
+    max_image_count_per_doc: int = 0
+    timeout_s: float = 10.0
+
+
+class WeatherToolConfig(BaseModel):
+    enabled: bool = True
+    provider: str = "doubao"
+    default_location: str = "上海松江"
+    timezone: str = "Asia/Shanghai"
+
+
 class StepConfig(BaseModel):
     api_key: str = ""
     stt_endpoint: str = "https://api.stepfun.com/v1/audio/transcriptions"
@@ -111,6 +141,10 @@ class Settings(BaseModel):
     conversation: ConversationConfig = ConversationConfig()
     debug: DebugConfig = DebugConfig()
     prompts: PromptsConfig = PromptsConfig()
+    tools: ToolsConfig = ToolsConfig()
+    tavily: TavilyConfig = TavilyConfig()
+    doubao_search: DoubaoSearchConfig = DoubaoSearchConfig()
+    weather: WeatherToolConfig = WeatherToolConfig()
     step: StepConfig = StepConfig()
     llm: LLMConfig = LLMConfig()
     tts: TTSConfig = TTSConfig()
@@ -150,4 +184,14 @@ def load_settings(path: Path | str | None = None) -> Settings:
     deepseek_key = os.environ.get("DEEPSEEK_API_KEY")
     if deepseek_key:
         settings.llm.deepseek.api_key = deepseek_key
+    tavily_key = os.environ.get("TAVILY_API_KEY") or os.environ.get("VOXCLAW_TAVILY_API_KEY")
+    if tavily_key:
+        settings.tavily.api_key = tavily_key
+    doubao_search_key = (
+        os.environ.get("DOUBAO_SEARCH_API_KEY")
+        or os.environ.get("VOLCENGINE_SEARCH_API_KEY")
+        or os.environ.get("VOXCLAW_DOUBAO_SEARCH_API_KEY")
+    )
+    if doubao_search_key:
+        settings.doubao_search.api_key = doubao_search_key
     return settings
