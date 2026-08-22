@@ -39,6 +39,16 @@ prompts: # 提示词与提示音文案配置
 tools: # 外部工具总开关；用于天气、新闻、提醒等实时/本地工具能力
   enabled: true # 是否启用工具层；false 时所有问题都直接走普通 LLM
 
+calendar: # 本地日历/时间工具配置；用于回答今天星期几、明天几号、下周一是几号等问题
+  enabled: true # 是否启用日历工具；启用后命中日期/星期/时间问题时不走 LLM，直接本地计算
+  timezone: "Asia/Shanghai" # 本地时区；用于计算今天/明天/下周等相对日期
+
+reminder: # 本地提醒/定时器工具配置
+  enabled: true # 是否启用提醒工具；支持多个提醒、取消提醒、到点后语音播报
+  timezone: "Asia/Shanghai" # 提醒时间解析时区；用于计算“十分钟后、明天八点”等相对/绝对时间
+  storage_path: "data/reminders.json" # 待触发提醒持久化文件；重启后未到期提醒仍会保留
+  check_interval_s: 1.0 # 后台检查提醒是否到期的间隔秒数；越小越及时但占用略高
+
 tavily: # Tavily REST API 配置；当前用于实时天气搜索，后续也可用于新闻/热点
   enabled: true # 是否启用 Tavily；需要同时配置 api_key 或环境变量 TAVILY_API_KEY
   api_key: "" # Tavily API Key；建议使用环境变量 TAVILY_API_KEY 或 VOXCLAW_TAVILY_API_KEY，模板文件请保持为空
@@ -87,8 +97,21 @@ llm: # 大语言模型后端配置
     model: "deepseek-chat" # DeepSeek 模型名；deepseek-chat 适合普通对话，deepseek-reasoner 适合推理但延迟更高
 
 tts: # 语音合成配置
-  voice: "linjiajiejie" # Step TTS 音色 ID；如 wenrounvsheng(温柔女声) / cixingnansheng(磁性男声) / linjiajiejie(邻家姐姐)
-  speed: 1.2 # 语速倍率；1.0 为正常速度，大于 1 更快，小于 1 更慢
-  transport: "websocket" # TTS 传输方式；websocket=流式低延迟边合成边播，http=整段合成完成后播放
+  provider: "step" # TTS 服务商；step=阶跃星辰，xfyun=科大讯飞
+  voice: "linjiajiejie" # Step TTS 音色 ID；provider=step 时使用，如 wenrounvsheng / cixingnansheng / linjiajiejie
+  speed: 1.2 # Step 语速倍率；provider=step 时使用，1.0 为正常速度，大于 1 更快，小于 1 更慢
+  transport: "websocket" # Step TTS 传输方式；provider=step 时使用，websocket=流式低延迟，http=整段合成；provider=xfyun 时固定流式播放
   ws_endpoint: "wss://api.stepfun.com/v1/realtime/audio" # Step TTS WebSocket 地址；transport=websocket 时使用
   ws_sample_rate: 24000 # WebSocket TTS 输出采样率；需与 Step TTS 返回音频配置匹配，通常保持 24000
+
+xfyun_tts: # 科大讯飞 TTS 配置；tts.provider=xfyun 时使用，控制台服务：https://console.xfyun.cn/services/tts
+  app_id: "" # 讯飞应用 AppID；建议用环境变量 XFYUN_APP_ID 或 VOXCLAW_XFYUN_APP_ID
+  api_key: "" # 讯飞 WebAPI APIKey；建议用环境变量 XFYUN_API_KEY 或 VOXCLAW_XFYUN_API_KEY
+  api_secret: "" # 讯飞 WebAPI APISecret；建议用环境变量 XFYUN_API_SECRET 或 VOXCLAW_XFYUN_API_SECRET
+  endpoint: "wss://tts-api.xfyun.cn/v2/tts" # 讯飞在线 TTS WebSocket 地址；通常保持默认即可
+  voice: "x4_yezi" # 讯飞发音人；普通话常用 x4_yezi，可在讯飞控制台查看可用发音人
+  sample_rate: 16000 # 讯飞输出采样率；普通在线 TTS 常用 16000
+  speed: 50 # 讯飞语速，范围通常 0-100；50 为默认
+  volume: 50 # 讯飞音量，范围通常 0-100；50 为默认
+  pitch: 50 # 讯飞音高，范围通常 0-100；50 为默认
+  timeout_s: 30.0 # 讯飞 TTS 连接与合成超时时间（秒）

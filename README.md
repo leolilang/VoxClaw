@@ -2,15 +2,17 @@
 
 基于 Python 的本地 AI 语音助手，支持 macOS 与 Windows。
 
-完整链路：**唤醒词检测 (openWakeWord) → 语音活动检测 (Silero VAD) → 语音识别 (Step STT) → AI 对话 (OpenClaw Gateway / Step API) → 语音合成 (Step TTS，支持 WebSocket 流式) → 本地播放**。
+完整链路：**唤醒词检测 (openWakeWord) → 语音活动检测 (Silero VAD) → 语音识别 (Step STT) → AI 对话 (OpenClaw Gateway / Step API) → 语音合成 (Step TTS / 科大讯飞 TTS) → 本地播放**。
 
 ## 核心特性
 
 - **多 LLM 后端一键切换**：本地 OpenClaw Gateway、Step API 直连或 DeepSeek API，改 `llm.provider` 即可
-- **流式 TTS 低延迟**：WebSocket 边合成边播放，首块音频约 1.6s 出声（HTTP 整段模式可切回）
+- **多 TTS 服务商**：可选择 Step TTS 或科大讯飞 TTS；两者都支持流式播放，讯飞可使用每日免费额度
 - **多轮对话**：回答完继续监听追问（默认 10s），无需重复喊唤醒词
 - **语音退出指令**：多轮对话中说"退下 / 关闭 / 停止"等词即回待机，指令词可配置
 - **DEBUG 手动唤醒**：`--debug` 下可用 `Shift+Control+I` 跳过唤醒词，验证录音、STT、LLM、TTS 链路
+- **本地日历时间**：不用联网即可回答今天星期几、明天几号、下周一是几号、现在几点等问题
+- **本地定时提醒**：支持多个提醒、取消提醒，提醒到点后自动语音播报
 - **实时天气查询**：通过豆包搜索或 Tavily 搜索最新天气信息，再由 LLM 总结成适合语音播报的回答
 
 ## 系统状态机
@@ -99,9 +101,12 @@ Copy-Item config\config.example.yaml config\config.yaml
 
 编辑 `config/config.yaml`：
 
-- `step.api_key`：Step API 密钥（也可用环境变量 `STEP_API_KEY`），用于 STT/TTS
+- `step.api_key`：Step API 密钥（也可用环境变量 `STEP_API_KEY`），用于 STT；`tts.provider: step` 时也用于 TTS
+- `tts.provider`：TTS 服务商，可选 `step` / `xfyun`；使用讯飞时配置 `xfyun_tts.app_id`、`xfyun_tts.api_key`、`xfyun_tts.api_secret`
 - `prompts.system`：LLM 系统提示词，用于控制助手人设、回答风格和长度
-- `prompts.voice_assets`：提示音生成文案，修改后需重新运行 `python scripts/generate_voice_assets.py`
+- `prompts.voice_assets`：提示音生成文案，修改后需重新运行 `python scripts/generate_voice_assets.py`，脚本会跟随 `tts.provider` 使用 Step 或讯飞生成
+- `calendar.timezone`：本地日历/时间工具使用的时区，例如 `Asia/Shanghai`
+- `reminder.storage_path`：本地提醒保存文件，默认 `data/reminders.json`，重启后未到期提醒仍会保留
 - `doubao_search.api_key`：豆包搜索 API Key，也可用环境变量 `DOUBAO_SEARCH_API_KEY` 或 `VOLCENGINE_SEARCH_API_KEY`；国内网络建议优先使用
 - `tavily.api_key`：Tavily API Key，也可用环境变量 `TAVILY_API_KEY`；可作为备用搜索源
 - `weather.default_location`：默认天气位置，用户没说地点时使用，例如 `上海松江`
@@ -132,6 +137,66 @@ python app.py --config 其他配置.yaml
 启动后对着麦克风说唤醒词（默认 "Hey Jarvis"），听到提示音后说出问题即可。按 `Ctrl+C` 退出。
 
 `--debug` 模式下也可以按 `Shift+Control+I` 手动触发唤醒：程序会跳过 openWakeWord 检测，直接播放唤醒提示音并进入录音，从而验证后续 STT、AI 回复和 TTS。该热键由 `debug.manual_wake_hotkey` 配置；macOS 首次使用全局热键时，可能需要在系统设置的“隐私与安全性 → 辅助功能”中授权当前终端。Windows 如遇热键冲突，可改为 `<ctrl>+<alt>+i`。
+
+## 本地日历时间
+
+日期、星期和当前时间问题会优先走本地工具，不依赖联网和大模型知识，因此响应快且稳定。
+
+支持示例：
+
+- “今天星期几？”
+- “明天星期几？”
+- “今天几号？”
+- “后天几号？”
+- “后天是星期几？”
+- “下个星期一是几号？”
+- “下周一是几号？”
+- “本周五是几号？”
+- “上周日是几号？”
+- “现在几点了？”
+- “今天是什么日子？”
+- “这个月有多少天？”
+- “二月有多少天？”
+
+配置方式：
+
+```yaml
+calendar:
+  enabled: true
+  timezone: Asia/Shanghai
+```
+
+## 本地定时提醒
+
+提醒会在本地解析和保存，不依赖联网；同一时间可以设置多个提醒，重启后未到期提醒会从 `data/reminders.json` 恢复。
+
+支持示例：
+
+- “十分钟后叫我”
+- “十五分钟之后提醒我喝水”
+- “再过十分钟后提醒我”
+- “5分钟后喊我”
+- “半小时后提醒我喝水”
+- “下午三点半提醒我喝水”
+- “明天早上八点叫我”
+- “十二点的时候喊我”
+- “查询提醒”
+- “现在有哪些任务？”
+- “我还有几个提醒？”
+- “取消提醒”
+- “取消所有提醒”
+
+设置成功后会播报类似“好的，我将在十分钟后提醒你”或“好的，我会在今天十二点提醒你”。创建提醒时会让 LLM 把口语化内容提炼成短事项，例如“我需要开会记得我”会保存为“开会”。查询时会播报当前待触发提醒列表，例如“你现在有2个提醒。第一个，今天六点提醒你：喝水”。到点后会播报“时间到了，我来提醒你了”或带上具体事项。说“取消提醒”会取消最近一个待触发提醒，说“取消所有提醒”会清空全部待触发提醒。
+
+配置方式：
+
+```yaml
+reminder:
+  enabled: true
+  timezone: Asia/Shanghai
+  storage_path: data/reminders.json
+  check_interval_s: 1.0
+```
 
 ## 实时天气查询
 
@@ -239,16 +304,42 @@ conversation:
 - **多轮模式（multi）**：回答播放完会再次响提示音并继续聆听，`follow_up_timeout_s` 秒内直接说话即可追问；超时未说话则回待机。
 - **退出指令（exit_words）**：识别文本完全等于指令词（如"退下"），或不超过 6 个字的短句包含指令词（如"好了退下吧"）时，播放休眠提示音并回待机；长句不受影响（如"帮我关闭客厅的灯"会正常送给 AI）。环境杂音触发误录音时，说一声"停止"即可结束对话。
 
-## TTS 传输模式
+## TTS 服务商
 
-由 `config.yaml` 的 `tts.transport` 控制：
+由 `config.yaml` 的 `tts.provider` 控制语音合成服务：
 
 ```yaml
 tts:
-  transport: websocket   # websocket=流式低延迟（边合成边播） / http=整段合成后播放
+  provider: step         # step=阶跃星辰 / xfyun=科大讯飞
+  transport: websocket   # provider=step 时生效：websocket=流式低延迟 / http=整段合成；provider=xfyun 时固定流式播放
+
+xfyun_tts:
+  app_id: ""             # 推荐使用环境变量 XFYUN_APP_ID
+  api_key: ""            # 推荐使用环境变量 XFYUN_API_KEY
+  api_secret: ""         # 推荐使用环境变量 XFYUN_API_SECRET
+  voice: xiaoyan         # 讯飞发音人，可在控制台查看
+  speed: 50              # 0-100，50 为默认
+  volume: 50
+  pitch: 50
 ```
 
-流式模式首块音频延迟约 1.6s；如遇音质问题可切回 `http`。
+Step 的 WebSocket 流式模式首块音频延迟约 1.6s；如遇音质问题可切回 `http`。讯飞使用 WebAPI WebSocket 流式返回音频，收到首块音频后立即播放，优点是可使用讯飞每日免费额度。启动日志会打印当前使用的 TTS 服务。
+
+讯飞环境变量示例：
+
+```bash
+export XFYUN_APP_ID=你的AppID
+export XFYUN_API_KEY=你的APIKey
+export XFYUN_API_SECRET=你的APISecret
+```
+
+Windows PowerShell：
+
+```powershell
+$env:XFYUN_APP_ID="你的AppID"
+$env:XFYUN_API_KEY="你的APIKey"
+$env:XFYUN_API_SECRET="你的APISecret"
+```
 
 ## 目录结构
 
@@ -286,14 +377,22 @@ voxclaw/
 | `prompts.system` | VoxClaw 语音助手... | LLM 系统提示词 |
 | `prompts.voice_assets.*` | greeting/wake/error/sleep | 提示音生成文案 |
 | `tools.enabled` | true | 是否启用工具层 |
+| `calendar.timezone` | Asia/Shanghai | 本地日历/时间工具使用的时区 |
+| `reminder.enabled` | true | 是否启用本地定时提醒工具 |
+| `reminder.timezone` | Asia/Shanghai | 解析提醒时间时使用的时区 |
+| `reminder.storage_path` | data/reminders.json | 待触发提醒持久化文件 |
+| `reminder.check_interval_s` | 1.0 | 后台检查提醒是否到期的间隔秒数 |
 | `doubao_search.api_key` | 空 | 豆包搜索 API Key，也可用环境变量 `DOUBAO_SEARCH_API_KEY` |
 | `tavily.api_key` | 空 | Tavily API Key，也可用环境变量 `TAVILY_API_KEY` |
 | `weather.provider` | doubao | 天气搜索源：doubao / tavily |
 | `weather.default_location` | 上海松江 | 天气查询默认位置 |
 | `llm.provider` | openclaw | LLM 后端：openclaw / stepfun / deepseek |
 | `llm.deepseek.model` | deepseek-chat | DeepSeek 官方 OpenAI 兼容模型名，可改为 deepseek-reasoner |
+| `tts.provider` | step | TTS 服务商：step / xfyun |
 | `tts.voice` | wenrounvsheng | 合成音色（wenrounvsheng / cixingnansheng / linjiajiejie 等） |
-| `tts.transport` | websocket | TTS 传输：websocket 流式 / http 整段 |
+| `tts.transport` | websocket | Step TTS 传输：websocket 流式 / http 整段；讯飞固定流式播放 |
+| `xfyun_tts.voice` | xiaoyan | 科大讯飞发音人，`tts.provider: xfyun` 时使用 |
+| `xfyun_tts.speed` | 50 | 科大讯飞语速，通常 0-100 |
 
 ## 常见问题
 

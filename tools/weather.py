@@ -75,6 +75,7 @@ class WeatherSearchTool:
             raise ValueError(f"未知 weather.provider: {self.provider}")
         data["voxclaw_context"] = context
         data["provider"] = self.provider
+        logger.debug("{} 天气归一化数据: {}", self.provider, json.dumps(data, ensure_ascii=False))
         logger.info("{} 天气查询完成：{} 条结果", self.provider, len(data.get("results") or []))
         return data
 
@@ -91,6 +92,13 @@ class WeatherSearchTool:
             "Content-Type": "application/json",
         }
         resp = await self._client.post(self._tavily.endpoint, headers=headers, json=payload)
+        logger.debug(
+            "Tavily 原始返回 [{}] endpoint={} query={} body={}",
+            resp.status_code,
+            self._tavily.endpoint,
+            query,
+            resp.text,
+        )
         if resp.status_code >= 400:
             logger.warning("Tavily 天气查询失败 [{}]: {}", resp.status_code, resp.text[:500])
         resp.raise_for_status()
@@ -113,6 +121,13 @@ class WeatherSearchTool:
             "Content-Type": "application/json",
         }
         resp = await self._client.post(self._doubao.endpoint, headers=headers, json=payload)
+        logger.debug(
+            "豆包搜索原始返回 [{}] endpoint={} query={} body={}",
+            resp.status_code,
+            self._doubao.endpoint,
+            query,
+            resp.text,
+        )
         if resp.status_code >= 400:
             logger.warning("豆包搜索天气查询失败 [{}]: {}", resp.status_code, resp.text[:500])
         resp.raise_for_status()
@@ -253,10 +268,11 @@ def build_weather_query(user_text: str, context: dict, timezone: str) -> str:
     location_part = user_text if context["explicit_location"] else context["default_location"]
     target_part = context["range_label"] or f"{context['target_date']} {context['day_label']} {context['period']}"
     return (
-        f"{location_part} {target_part} 天气 逐小时预报 降雨概率 气温 是否需要带伞\n"
+        #f"{location_part} {target_part} 天气 逐小时预报 降雨概率 气温 是否需要带伞\n"
+        f"{location_part} {target_part} 天气 \n"
         f"用户原始问题：{user_text}\n"
         f"当前时间：{context['now']}，时区：{timezone}。\n"
-        "请优先返回与目标日期和时段完全匹配的最新天气信息；如果问下午/上午/晚上，请查逐小时预报或分时段预报。"
+        #"请优先返回与目标日期和时段完全匹配的最新天气信息；如果问下午/上午/晚上，请查逐小时预报或分时段预报。"
     )
 
 

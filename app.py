@@ -17,6 +17,7 @@ from llm.openclaw import OpenClawClient
 from stt.step_stt import StepSTT
 from tts.step_tts import StepTTS
 from tts.step_tts_ws import StepTTSWebSocket
+from tts.xfyun_tts import XfyunTTS
 from utils.logger import setup_logger
 from utils.platform_info import log_runtime_environment
 from vad.recorder import VADRecorder
@@ -29,7 +30,7 @@ async def main(config_path: str | None, debug: bool = False):
     logger = setup_logger("DEBUG" if debug else "INFO")
 
     if not settings.step.api_key:
-        logger.warning("未配置 Step API Key（config.yaml 的 step.api_key 或环境变量 STEP_API_KEY），STT/TTS 将无法工作")
+        logger.warning("未配置 Step API Key（config.yaml 的 step.api_key 或环境变量 STEP_API_KEY），Step STT 将无法工作")
 
     log_runtime_environment()
     log_default_devices()
@@ -48,13 +49,22 @@ async def main(config_path: str | None, debug: bool = False):
     llm = OpenClawClient(chat_config)
     logger.info("LLM 使用 {} 后端（model: {}, endpoint: {}）",
                 settings.llm.provider, chat_config.model, chat_config.endpoint)
-    tts = StepTTS(settings.step, settings.tts)
     tts_ws = None
-    if settings.tts.transport == "websocket":
-        tts_ws = StepTTSWebSocket(settings.step, settings.tts)
-        logger.info("TTS 使用 WebSocket 流式模式（transport: websocket）")
+    if settings.tts.provider == "step":
+        tts = StepTTS(settings.step, settings.tts)
+        if settings.tts.transport == "websocket":
+            tts_ws = StepTTSWebSocket(settings.step, settings.tts)
+            logger.info("TTS 使用 Step 服务（transport: websocket, voice: {}）", settings.tts.voice)
+        else:
+            logger.info("TTS 使用 Step 服务（transport: http, voice: {}）", settings.tts.voice)
+    elif settings.tts.provider == "xfyun":
+        if not (settings.xfyun_tts.app_id and settings.xfyun_tts.api_key and settings.xfyun_tts.api_secret):
+            logger.warning("TTS 已选择科大讯飞，但未完整配置 xfyun_tts.app_id/api_key/api_secret")
+        tts = XfyunTTS(settings.xfyun_tts, settings.tts)
+        tts_ws = tts
+        logger.info("TTS 使用科大讯飞服务（transport: websocket, voice: {}, sample_rate: {}）", settings.xfyun_tts.voice, settings.xfyun_tts.sample_rate)
     else:
-        logger.info("TTS 使用 HTTP 整段模式（transport: http）")
+        raise ValueError(f"未知 tts.provider: {settings.tts.provider}（可选 step / xfyun）")
 
     pipeline = VoicePipeline(settings, mic, player, wakeword, vad_recorder, stt, llm, tts, tts_ws, debug=debug)
     try:

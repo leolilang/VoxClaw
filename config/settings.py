@@ -78,6 +78,18 @@ class DoubaoSearchConfig(BaseModel):
     timeout_s: float = 10.0
 
 
+class CalendarToolConfig(BaseModel):
+    enabled: bool = True
+    timezone: str = "Asia/Shanghai"
+
+
+class ReminderToolConfig(BaseModel):
+    enabled: bool = True
+    timezone: str = "Asia/Shanghai"
+    storage_path: str = "data/reminders.json"
+    check_interval_s: float = 1.0
+
+
 class WeatherToolConfig(BaseModel):
     enabled: bool = True
     provider: str = "doubao"
@@ -127,11 +139,25 @@ class ChatConfig(BaseModel):
 
 
 class TTSConfig(BaseModel):
+    provider: str = "step"  # step=阶跃星辰 TTS / xfyun=科大讯飞 TTS
     voice: str = "wenrounvsheng"
     speed: float = 1.0
     transport: str = "websocket"  # websocket=流式低延迟 / http=整段合成
     ws_endpoint: str = "wss://api.stepfun.com/v1/realtime/audio"
     ws_sample_rate: int = 24000
+
+
+class XfyunTTSConfig(BaseModel):
+    app_id: str = ""
+    api_key: str = ""
+    api_secret: str = ""
+    endpoint: str = "wss://tts-api.xfyun.cn/v2/tts"
+    voice: str = "xiaoyan"
+    sample_rate: int = 16000
+    speed: int = 50
+    volume: int = 50
+    pitch: int = 50
+    timeout_s: float = 30.0
 
 
 class Settings(BaseModel):
@@ -144,10 +170,13 @@ class Settings(BaseModel):
     tools: ToolsConfig = ToolsConfig()
     tavily: TavilyConfig = TavilyConfig()
     doubao_search: DoubaoSearchConfig = DoubaoSearchConfig()
+    calendar: CalendarToolConfig = CalendarToolConfig()
+    reminder: ReminderToolConfig = ReminderToolConfig()
     weather: WeatherToolConfig = WeatherToolConfig()
     step: StepConfig = StepConfig()
     llm: LLMConfig = LLMConfig()
     tts: TTSConfig = TTSConfig()
+    xfyun_tts: XfyunTTSConfig = XfyunTTSConfig()
 
     def resolve_llm(self) -> ChatConfig:
         if self.llm.provider not in ("openclaw", "stepfun", "deepseek"):
@@ -194,4 +223,13 @@ def load_settings(path: Path | str | None = None) -> Settings:
     )
     if doubao_search_key:
         settings.doubao_search.api_key = doubao_search_key
+    xfyun_app_id = os.environ.get("XFYUN_APP_ID") or os.environ.get("VOXCLAW_XFYUN_APP_ID")
+    if xfyun_app_id:
+        settings.xfyun_tts.app_id = xfyun_app_id
+    xfyun_api_key = os.environ.get("XFYUN_API_KEY") or os.environ.get("VOXCLAW_XFYUN_API_KEY")
+    if xfyun_api_key:
+        settings.xfyun_tts.api_key = xfyun_api_key
+    xfyun_api_secret = os.environ.get("XFYUN_API_SECRET") or os.environ.get("VOXCLAW_XFYUN_API_SECRET")
+    if xfyun_api_secret:
+        settings.xfyun_tts.api_secret = xfyun_api_secret
     return settings

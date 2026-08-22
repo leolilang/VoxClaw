@@ -43,6 +43,14 @@ class OpenClawClient:
             "/v1/chat/completions",
             json={"model": self._config.model, "messages": messages},
         )
+        logger.debug(
+            "LLM 原始返回 [{}] model={} endpoint={} label={} body={}",
+            resp.status_code,
+            self._config.model,
+            self._config.endpoint,
+            label,
+            resp.text,
+        )
         if resp.status_code >= 400:
             logger.warning(
                 "LLM 请求失败 [{}] model={} endpoint={}: {}",

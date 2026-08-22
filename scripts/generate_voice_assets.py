@@ -1,4 +1,4 @@
-"""用 Step TTS 生成语音提示音（使用 config.yaml 中的音色与文案）。
+"""用配置的 TTS 服务生成语音提示音（使用 config.yaml 中的音色与文案）。
 
 生成:
     assets/greeting.wav  启动问候
@@ -10,22 +10,34 @@
 """
 
 import argparse
+import asyncio
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import httpx
-
 from config.settings import load_settings
+from tts.step_tts import StepTTS
+from tts.xfyun_tts import XfyunTTS
 
 ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
 
 
-def main(config_path: str | None):
+async def generate(config_path: str | None):
     settings = load_settings(config_path)
-    if not settings.step.api_key:
-        sys.exit("未配置 step.api_key，无法调用 TTS")
+    if settings.tts.provider == "step":
+        if not settings.step.api_key:
+            sys.exit("未配置 step.api_key，无法调用 Step TTS")
+        tts = StepTTS(settings.step, settings.tts)
+        voice_label = settings.tts.voice
+    elif settings.tts.provider == "xfyun":
+        if not (settings.xfyun_tts.app_id and settings.xfyun_tts.api_key and settings.xfyun_tts.api_secret):
+            sys.exit("未配置 xfyun_tts.app_id/api_key/api_secret，无法调用讯飞 TTS")
+        tts = XfyunTTS(settings.xfyun_tts, settings.tts)
+        voice_label = settings.xfyun_tts.voice
+    else:
+        sys.exit(f"未知 tts.provider: {settings.tts.provider}（可选 step / xfyun）")
+
     prompts = {
         "greeting.wav": settings.prompts.voice_assets.greeting,
         "wake.wav": settings.prompts.voice_assets.wake,
@@ -34,26 +46,20 @@ def main(config_path: str | None):
     }
 
     ASSETS_DIR.mkdir(exist_ok=True)
-    with httpx.Client(timeout=60.0) as client:
+    try:
         for name, text in prompts.items():
             if not text:
                 print(f"跳过 {name}：未配置 prompts.voice_assets 文案")
                 continue
-            resp = client.post(
-                settings.step.tts_endpoint,
-                headers={"Authorization": f"Bearer {settings.step.api_key}"},
-                json={
-                    "model": settings.step.tts_model,
-                    "input": text,
-                    "voice": settings.tts.voice,
-                    "response_format": "wav",
-                    "speed": settings.tts.speed,
-                },
-            )
-            resp.raise_for_status()
             path = ASSETS_DIR / name
-            path.write_bytes(resp.content)
-            print(f"生成 {path}（{settings.tts.voice}）: {text}")
+            path.write_bytes(await tts.synthesize(text))
+            print(f"生成 {path}（{settings.tts.provider}/{voice_label}）: {text}")
+    finally:
+        await tts.close()
+
+
+def main(config_path: str | None):
+    asyncio.run(generate(config_path))
 
 
 if __name__ == "__main__":
