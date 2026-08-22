@@ -13,14 +13,14 @@ import numpy as np
 import websockets
 from loguru import logger
 
-from config.settings import StepConfig, TTSConfig
+from config.settings import StepTTSConfig, TTSConfig
 from utils.timer import Timer
 
 TEXT_CHUNK_CHARS = 500  # 单条 tts.text.delta 上限 1000 字符，留余量
 
 
 class StepTTSWebSocket:
-    def __init__(self, step_config: StepConfig, tts_config: TTSConfig):
+    def __init__(self, step_config: StepTTSConfig, tts_config: TTSConfig):
         self._step = step_config
         self._tts = tts_config
         self._url = f"{tts_config.ws_endpoint}?model={step_config.tts_model}"

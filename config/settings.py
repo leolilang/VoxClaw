@@ -97,22 +97,50 @@ class WeatherToolConfig(BaseModel):
     timezone: str = "Asia/Shanghai"
 
 
-class StepConfig(BaseModel):
+class StepSTTConfig(BaseModel):
     api_key: str = ""
     stt_endpoint: str = "https://api.stepfun.com/v1/audio/transcriptions"
-    tts_endpoint: str = "https://api.stepfun.com/v1/audio/speech"
     stt_model: str = "step-asr"
+
+
+class TencentSTTConfig(BaseModel):
+    secret_id: str = ""
+    secret_key: str = ""
+    endpoint: str = "https://asr.tencentcloudapi.com"
+    region: str = "ap-shanghai"
+    engine_model_type: str = "16k_zh"
+    voice_format: str = "wav"
+    project_id: int = 0
+    sub_service_type: int = 2
+    timeout_s: float = 30.0
+
+
+class STTConfig(BaseModel):
+    provider: str = "step"  # step=阶跃星辰 STT / tencent=腾讯云语音识别
+    step: StepSTTConfig = StepSTTConfig()
+    tencent: TencentSTTConfig = TencentSTTConfig()
+
+
+class StepTTSConfig(BaseModel):
+    api_key: str = ""
+    tts_endpoint: str = "https://api.stepfun.com/v1/audio/speech"
     tts_model: str = "step-tts-mini"
+    voice: str = "wenrounvsheng"
+    speed: float = 1.0
+    transport: str = "websocket"  # websocket=流式低延迟 / http=整段合成
+    ws_endpoint: str = "wss://api.stepfun.com/v1/realtime/audio"
+    ws_sample_rate: int = 24000
 
 
 class LLMEndpointConfig(BaseModel):
     endpoint: str = ""
     api_key: str = ""
     model: str = ""
+    api_path: str = "/v1/chat/completions"
 
 
 class LLMConfig(BaseModel):
-    provider: str = "openclaw"  # openclaw=本地 OpenClaw Gateway / stepfun=Step API 直连 / deepseek=DeepSeek API
+    provider: str = "openclaw"  # openclaw=本地 OpenClaw Gateway / stepfun=Step API 直连 / deepseek=DeepSeek API / zhipu=智谱 AI
     timeout_s: float = 60.0
     max_history: int = 20
     system_prompt: str = ""  # 兼容旧配置；新配置请使用 prompts.system
@@ -125,26 +153,21 @@ class LLMConfig(BaseModel):
     deepseek: LLMEndpointConfig = LLMEndpointConfig(
         endpoint="https://api.deepseek.com", model="deepseek-chat"
     )
+    zhipu: LLMEndpointConfig = LLMEndpointConfig(
+        endpoint="https://open.bigmodel.cn/api/paas", model="glm-4-flash", api_path="/v4/chat/completions"
+    )
 
 
 class ChatConfig(BaseModel):
     """由 LLMConfig 按 provider 解析出的最终 LLM 客户端配置。"""
 
     endpoint: str
+    api_path: str = "/v1/chat/completions"
     api_key: str = ""
     model: str
     timeout_s: float = 60.0
     max_history: int = 20
     system_prompt: str = ""
-
-
-class TTSConfig(BaseModel):
-    provider: str = "step"  # step=阶跃星辰 TTS / xfyun=科大讯飞 TTS
-    voice: str = "wenrounvsheng"
-    speed: float = 1.0
-    transport: str = "websocket"  # websocket=流式低延迟 / http=整段合成
-    ws_endpoint: str = "wss://api.stepfun.com/v1/realtime/audio"
-    ws_sample_rate: int = 24000
 
 
 class XfyunTTSConfig(BaseModel):
@@ -160,6 +183,32 @@ class XfyunTTSConfig(BaseModel):
     timeout_s: float = 30.0
 
 
+class TTSConfig(BaseModel):
+    provider: str = "step"  # step=阶跃星辰 TTS / xfyun=科大讯飞 TTS
+    step: StepTTSConfig = StepTTSConfig()
+    xfyun: XfyunTTSConfig = XfyunTTSConfig()
+
+    @property
+    def voice(self) -> str:
+        return self.step.voice
+
+    @property
+    def speed(self) -> float:
+        return self.step.speed
+
+    @property
+    def transport(self) -> str:
+        return self.step.transport
+
+    @property
+    def ws_endpoint(self) -> str:
+        return self.step.ws_endpoint
+
+    @property
+    def ws_sample_rate(self) -> int:
+        return self.step.ws_sample_rate
+
+
 class Settings(BaseModel):
     audio: AudioConfig = AudioConfig()
     wakeword: WakeWordConfig = WakeWordConfig()
@@ -173,20 +222,18 @@ class Settings(BaseModel):
     calendar: CalendarToolConfig = CalendarToolConfig()
     reminder: ReminderToolConfig = ReminderToolConfig()
     weather: WeatherToolConfig = WeatherToolConfig()
-    step: StepConfig = StepConfig()
+    stt: STTConfig = STTConfig()
     llm: LLMConfig = LLMConfig()
     tts: TTSConfig = TTSConfig()
-    xfyun_tts: XfyunTTSConfig = XfyunTTSConfig()
 
     def resolve_llm(self) -> ChatConfig:
-        if self.llm.provider not in ("openclaw", "stepfun", "deepseek"):
-            raise ValueError(f"未知的 llm.provider: {self.llm.provider}（可选 openclaw / stepfun / deepseek）")
+        if self.llm.provider not in ("openclaw", "stepfun", "deepseek", "zhipu"):
+            raise ValueError(f"未知的 llm.provider: {self.llm.provider}（可选 openclaw / stepfun / deepseek / zhipu）")
         ep = getattr(self.llm, self.llm.provider)
         api_key = ep.api_key
-        if not api_key and self.llm.provider == "stepfun":
-            api_key = self.step.api_key  # stepfun 直连时默认复用 step.api_key
         return ChatConfig(
             endpoint=ep.endpoint,
+            api_path=ep.api_path,
             api_key=api_key,
             model=ep.model,
             timeout_s=self.llm.timeout_s,
@@ -206,13 +253,23 @@ def load_settings(path: Path | str | None = None) -> Settings:
 
     env_key = os.environ.get("STEP_API_KEY") or os.environ.get("VOXCLAW_STEP_API_KEY")
     if env_key:
-        settings.step.api_key = env_key
+        settings.stt.step.api_key = env_key
+        settings.tts.step.api_key = env_key
     openclaw_key = os.environ.get("OPENCLAW_API_KEY")
     if openclaw_key:
         settings.llm.openclaw.api_key = openclaw_key
     deepseek_key = os.environ.get("DEEPSEEK_API_KEY")
     if deepseek_key:
         settings.llm.deepseek.api_key = deepseek_key
+    zhipu_key = os.environ.get("ZHIPU_API_KEY") or os.environ.get("BIGMODEL_API_KEY") or os.environ.get("VOXCLAW_ZHIPU_API_KEY")
+    if zhipu_key:
+        settings.llm.zhipu.api_key = zhipu_key
+    tencent_secret_id = os.environ.get("TENCENT_SECRET_ID") or os.environ.get("TENCENTCLOUD_SECRET_ID") or os.environ.get("VOXCLAW_TENCENT_SECRET_ID")
+    if tencent_secret_id:
+        settings.stt.tencent.secret_id = tencent_secret_id
+    tencent_secret_key = os.environ.get("TENCENT_SECRET_KEY") or os.environ.get("TENCENTCLOUD_SECRET_KEY") or os.environ.get("VOXCLAW_TENCENT_SECRET_KEY")
+    if tencent_secret_key:
+        settings.stt.tencent.secret_key = tencent_secret_key
     tavily_key = os.environ.get("TAVILY_API_KEY") or os.environ.get("VOXCLAW_TAVILY_API_KEY")
     if tavily_key:
         settings.tavily.api_key = tavily_key
@@ -225,11 +282,11 @@ def load_settings(path: Path | str | None = None) -> Settings:
         settings.doubao_search.api_key = doubao_search_key
     xfyun_app_id = os.environ.get("XFYUN_APP_ID") or os.environ.get("VOXCLAW_XFYUN_APP_ID")
     if xfyun_app_id:
-        settings.xfyun_tts.app_id = xfyun_app_id
+        settings.tts.xfyun.app_id = xfyun_app_id
     xfyun_api_key = os.environ.get("XFYUN_API_KEY") or os.environ.get("VOXCLAW_XFYUN_API_KEY")
     if xfyun_api_key:
-        settings.xfyun_tts.api_key = xfyun_api_key
+        settings.tts.xfyun.api_key = xfyun_api_key
     xfyun_api_secret = os.environ.get("XFYUN_API_SECRET") or os.environ.get("VOXCLAW_XFYUN_API_SECRET")
     if xfyun_api_secret:
-        settings.xfyun_tts.api_secret = xfyun_api_secret
+        settings.tts.xfyun.api_secret = xfyun_api_secret
     return settings

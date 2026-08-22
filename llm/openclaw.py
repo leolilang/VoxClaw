@@ -40,23 +40,25 @@ class OpenClawClient:
     async def _chat_completion(self, messages: list[dict], label: str) -> str:
         timer = Timer()
         resp = await self._client.post(
-            "/v1/chat/completions",
+            self._config.api_path,
             json={"model": self._config.model, "messages": messages},
         )
         logger.debug(
-            "LLM 原始返回 [{}] model={} endpoint={} label={} body={}",
+            "LLM 原始返回 [{}] model={} endpoint={} api_path={} label={} body={}",
             resp.status_code,
             self._config.model,
             self._config.endpoint,
+            self._config.api_path,
             label,
             resp.text,
         )
         if resp.status_code >= 400:
             logger.warning(
-                "LLM 请求失败 [{}] model={} endpoint={}: {}",
+                "LLM 请求失败 [{}] model={} endpoint={} api_path={}: {}",
                 resp.status_code,
                 self._config.model,
                 self._config.endpoint,
+                self._config.api_path,
                 resp.text[:500],
             )
         resp.raise_for_status()

@@ -72,46 +72,67 @@ weather: # 天气查询工具配置；通过搜索 API 获取实时天气网页�
   default_location: "上海松江" # 默认天气位置；用户没说城市/区县时使用这里
   timezone: "Asia/Shanghai" # 查询时区；用于“今天/明天/下午”等相对时间判断
 
-step: # Step API 配置，用于 STT 和 TTS
-  api_key: "" # Step API Key；建议生产环境使用环境变量 STEP_API_KEY 或 VOXCLAW_STEP_API_KEY 覆盖，模板文件请保持为空
-  stt_endpoint: "https://api.stepfun.com/v1/audio/transcriptions" # Step STT 接口地址；通常保持默认即可
-  tts_endpoint: "https://api.stepfun.com/v1/audio/speech" # Step TTS HTTP 接口地址；transport=http 时使用，也用于生成提示音
-  stt_model: "step-asr" # STT 模型名；Step 语音识别默认使用 step-asr
-  tts_model: "step-tts-mini" # TTS 模型名；HTTP 和 WebSocket TTS 都会使用该模型参数
+stt: # 语音识别配置
+  provider: "tencent" # STT 服务商选择；step=阶跃星辰，tencent=腾讯云语音识别
+  step: # Step STT 配置；provider=step 时使用
+    api_key: "" # Step STT API Key；建议使用环境变量 STEP_API_KEY 或 VOXCLAW_STEP_API_KEY
+    stt_endpoint: "https://api.stepfun.com/v1/audio/transcriptions" # Step STT 接口地址；通常保持默认即可
+    stt_model: "step-asr" # Step STT 模型名；通常保持 step-asr
+  tencent: # 腾讯云一句话语音识别配置；provider=tencent 时使用
+    secret_id: "" # 腾讯云 SecretId；建议用环境变量 TENCENT_SECRET_ID 或 TENCENTCLOUD_SECRET_ID，模板文件请保持为空
+    secret_key: "" # 腾讯云 SecretKey；建议用环境变量 TENCENT_SECRET_KEY 或 TENCENTCLOUD_SECRET_KEY，模板文件请保持为空
+    endpoint: "https://asr.tencentcloudapi.com" # 腾讯云 ASR 接口地址；通常保持默认即可
+    region: "ap-shanghai" # 腾讯云地域；一句话识别可使用 ap-shanghai
+    engine_model_type: "16k_zh" # 识别引擎；16k_zh 适合 16k 中文普通话
+    voice_format: "wav" # 上传音频格式；当前本地录音会转成 wav
+    project_id: 0 # 腾讯云项目 ID；默认 0
+    sub_service_type: 2 # 子服务类型；一句话识别固定使用 2
+    timeout_s: 30.0 # 腾讯云 STT 请求超时时间（秒）
 
 llm: # 大语言模型后端配置
-  provider: "stepfun" # LLM 后端选择；openclaw=本地 OpenClaw Gateway，stepfun=Step API 直连，deepseek=DeepSeek API
+  provider: "zhipu" # LLM 后端选择；openclaw=本地 OpenClaw Gateway，stepfun=Step API 直连，deepseek=DeepSeek API，zhipu=智谱 AI
   timeout_s: 60.0 # LLM 请求超时时间（秒）；网络慢或本地模型慢时可适当调大
   max_history: 20 # 发送给 LLM 的历史消息数量上限；越大上下文越完整，但请求越慢、token 消耗越高
   openclaw: # 本地 OpenClaw Gateway 配置；provider=openclaw 时使用
     endpoint: "http://127.0.0.1:18789" # OpenClaw Gateway 地址；使用本地贾维斯/OpenClaw 服务时保持默认或改为你的网关地址
+    api_path: "/v1/chat/completions" # OpenAI 兼容 Chat Completions 路径；OpenClaw/Step/DeepSeek 通常使用 /v1/chat/completions
     api_key: "" # OpenClaw Gateway 鉴权 token；对应 gateway.auth.token，可用环境变量 OPENCLAW_API_KEY 覆盖
     model: "openclaw" # OpenClaw Gateway 暴露的模型名；通常保持 openclaw
   stepfun: # Step OpenAI 兼容 LLM 配置；provider=stepfun 时使用
     endpoint: "https://api.stepfun.com" # Step OpenAI 兼容接口地址
-    api_key: "" # Step LLM API Key；留空会自动复用上面的 step.api_key
+    api_path: "/v1/chat/completions" # Step OpenAI 兼容 Chat Completions 路径；通常保持默认即可
+    api_key: "" # Step LLM API Key；provider=stepfun 时填写，也可用独立环境变量扩展
     model: "step-3.5-flash" # Step LLM 模型名；可按 Step 官方支持模型调整
   deepseek: # DeepSeek OpenAI 兼容 LLM 配置；provider=deepseek 时使用
     endpoint: "https://api.deepseek.com" # DeepSeek OpenAI 兼容接口地址
+    api_path: "/v1/chat/completions" # DeepSeek OpenAI 兼容 Chat Completions 路径；通常保持默认即可
     api_key: "" # DeepSeek API Key；也可通过环境变量 DEEPSEEK_API_KEY 设置，模板文件请保持为空
     model: "deepseek-chat" # DeepSeek 模型名；deepseek-chat 适合普通对话，deepseek-reasoner 适合推理但延迟更高
+  zhipu: # 智谱 AI OpenAI 兼容 LLM 配置；provider=zhipu 时使用
+    endpoint: "https://open.bigmodel.cn/api/paas" # 智谱 OpenAI 兼容接口基础地址；客户端会请求 /v4/chat/completions
+    api_path: "/v4/chat/completions" # 智谱 Chat Completions 路径；智谱 OpenAI 兼容接口使用 /v4/chat/completions
+    api_key: "" # 智谱 API Key；建议使用环境变量 ZHIPU_API_KEY 或 BIGMODEL_API_KEY，模板文件请保持为空
+    model: "glm-4-flash" # 智谱免费模型；可改为 glm-4.7-flash
 
 tts: # 语音合成配置
-  provider: "step" # TTS 服务商；step=阶跃星辰，xfyun=科大讯飞
-  voice: "linjiajiejie" # Step TTS 音色 ID；provider=step 时使用，如 wenrounvsheng / cixingnansheng / linjiajiejie
-  speed: 1.2 # Step 语速倍率；provider=step 时使用，1.0 为正常速度，大于 1 更快，小于 1 更慢
-  transport: "websocket" # Step TTS 传输方式；provider=step 时使用，websocket=流式低延迟，http=整段合成；provider=xfyun 时固定流式播放
-  ws_endpoint: "wss://api.stepfun.com/v1/realtime/audio" # Step TTS WebSocket 地址；transport=websocket 时使用
-  ws_sample_rate: 24000 # WebSocket TTS 输出采样率；需与 Step TTS 返回音频配置匹配，通常保持 24000
-
-xfyun_tts: # 科大讯飞 TTS 配置；tts.provider=xfyun 时使用，控制台服务：https://console.xfyun.cn/services/tts
-  app_id: "" # 讯飞应用 AppID；建议用环境变量 XFYUN_APP_ID 或 VOXCLAW_XFYUN_APP_ID
-  api_key: "" # 讯飞 WebAPI APIKey；建议用环境变量 XFYUN_API_KEY 或 VOXCLAW_XFYUN_API_KEY
-  api_secret: "" # 讯飞 WebAPI APISecret；建议用环境变量 XFYUN_API_SECRET 或 VOXCLAW_XFYUN_API_SECRET
-  endpoint: "wss://tts-api.xfyun.cn/v2/tts" # 讯飞在线 TTS WebSocket 地址；通常保持默认即可
-  voice: "x4_yezi" # 讯飞发音人；普通话常用 x4_yezi，可在讯飞控制台查看可用发音人
-  sample_rate: 16000 # 讯飞输出采样率；普通在线 TTS 常用 16000
-  speed: 50 # 讯飞语速，范围通常 0-100；50 为默认
-  volume: 50 # 讯飞音量，范围通常 0-100；50 为默认
-  pitch: 50 # 讯飞音高，范围通常 0-100；50 为默认
-  timeout_s: 30.0 # 讯飞 TTS 连接与合成超时时间（秒）
+  provider: "step" # TTS 服务商选择；step=阶跃星辰，xfyun=科大讯飞
+  step: # Step TTS 配置；provider=step 时使用
+    api_key: "" # Step TTS API Key；建议使用环境变量 STEP_API_KEY 或 VOXCLAW_STEP_API_KEY
+    tts_endpoint: "https://api.stepfun.com/v1/audio/speech" # Step TTS HTTP 接口地址；transport=http 时使用，也用于生成提示音
+    tts_model: "step-tts-mini" # Step TTS 模型名；HTTP 和 WebSocket TTS 都使用该模型参数
+    voice: "linjiajiejie" # Step 音色 ID；如 wenrounvsheng / cixingnansheng / linjiajiejie
+    speed: 1.2 # Step 语速倍率；1.0 为正常速度，大于 1 更快，小于 1 更慢
+    transport: "websocket" # Step 传输方式；websocket=流式低延迟，http=整段合成
+    ws_endpoint: "wss://api.stepfun.com/v1/realtime/audio" # Step TTS WebSocket 地址；transport=websocket 时使用
+    ws_sample_rate: 24000 # Step WebSocket TTS 输出采样率；通常保持 24000
+  xfyun: # 科大讯飞 TTS 配置；provider=xfyun 时使用，控制台服务：https://console.xfyun.cn/services/tts
+    app_id: "" # 讯飞应用 AppID；建议用环境变量 XFYUN_APP_ID 或 VOXCLAW_XFYUN_APP_ID
+    api_key: "" # 讯飞 WebAPI APIKey；建议用环境变量 XFYUN_API_KEY 或 VOXCLAW_XFYUN_API_KEY
+    api_secret: "" # 讯飞 WebAPI APISecret；建议用环境变量 XFYUN_API_SECRET 或 VOXCLAW_XFYUN_API_SECRET
+    endpoint: "wss://tts-api.xfyun.cn/v2/tts" # 讯飞在线 TTS WebSocket 地址；通常保持默认即可
+    voice: "x4_yezi" # 讯飞发音人；普通话常用 x4_yezi，可在讯飞控制台查看可用发音人
+    sample_rate: 16000 # 讯飞输出采样率；普通在线 TTS 常用 16000
+    speed: 50 # 讯飞语速，范围通常 0-100；50 为默认
+    volume: 50 # 讯飞音量，范围通常 0-100；50 为默认
+    pitch: 50 # 讯飞音高，范围通常 0-100；50 为默认
+    timeout_s: 30.0 # 讯飞 TTS 连接与合成超时时间（秒）
