@@ -1,4 +1,7 @@
-"""系统状态机：IDLE -> LISTENING -> RECORDING -> THINKING -> SPEAKING -> IDLE。"""
+"""系统状态机：IDLE -> LISTENING -> RECORDING -> THINKING -> SPEAKING -> IDLE。
+
+后台提醒到期时也允许从 IDLE 直接进入 SPEAKING 播报提醒。
+"""
 
 from enum import Enum
 
@@ -14,7 +17,7 @@ class State(Enum):
 
 
 TRANSITIONS: dict[State, set[State]] = {
-    State.IDLE: {State.LISTENING},
+    State.IDLE: {State.LISTENING, State.SPEAKING},
     State.LISTENING: {State.RECORDING, State.IDLE},
     State.RECORDING: {State.THINKING, State.IDLE},
     State.THINKING: {State.SPEAKING, State.IDLE},

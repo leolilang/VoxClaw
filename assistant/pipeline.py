@@ -4,6 +4,7 @@
 """
 
 import asyncio
+import re
 from pathlib import Path
 
 from loguru import logger
@@ -20,10 +21,33 @@ from tts.step_tts_ws import StepTTSWebSocket
 from utils.timer import Timer
 from utils.text_utils import clean_for_tts, is_exit_command
 from utils.debug_hotkey import ManualWakeHotkey
+from tools.calendar import CalendarTool
+from tools.reminder import (
+    ReminderTool,
+    build_due_speech,
+    is_cancel_request,
+    is_query_request,
+    normalize_text,
+)
+from tools.weather import WeatherSearchTool, build_weather_summary_prompt
 from vad.recorder import VADRecorder
 from wakeword.detector import WakeWordDetector
 
 ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
+
+
+def clean_reminder_summary(text: str) -> str:
+    text = (text or "").strip()
+    text = re.sub(r"^(输出|事项|提醒事项)[:：]", "", text).strip()
+    text = text.strip("\"'“”‘’`，。！？、,.!?；;：: ")
+    text = re.sub(r"^(提醒我|提醒|记得|叫我|喊我|我需要|需要)", "", text).strip()
+    text = re.sub(r"(记得我|提醒我|叫我|喊我)$", "", text).strip()
+    text = text.strip("\"'“”‘’`，。！？、,.!?；;：: ")
+    if not text:
+        return ""
+    if len(text) > 12:
+        text = text[:12]
+    return text
 
 
 class VoicePipeline:
@@ -53,6 +77,11 @@ class VoicePipeline:
         self._session = Session()
         self._running = False
         self._manual_wake = ManualWakeHotkey(settings.debug.manual_wake_hotkey) if debug else None
+        self._calendar_tool = CalendarTool(settings.calendar) if settings.tools.enabled else None
+        self._reminder_tool = ReminderTool(settings.reminder) if settings.tools.enabled else None
+        self._reminder_task: asyncio.Task | None = None
+        self._speech_lock = asyncio.Lock()
+        self._weather_tool = WeatherSearchTool(settings.tavily, settings.doubao_search, settings.weather) if settings.tools.enabled else None
 
     async def run(self):
         self._running = True
@@ -66,6 +95,8 @@ class VoicePipeline:
         )
         await self._play_asset("greeting.wav")
         self._mic.clear()  # 丢弃问候语播放期间采集的回声
+        if self._reminder_tool is not None and self._reminder_tool.enabled:
+            self._reminder_task = asyncio.create_task(self._run_reminder_loop())
         try:
             while self._running:
                 await self._wait_for_wakeword()
@@ -79,6 +110,9 @@ class VoicePipeline:
                 finally:
                     self._back_to_idle()
         finally:
+            if self._reminder_task is not None:
+                self._reminder_task.cancel()
+                await asyncio.gather(self._reminder_task, return_exceptions=True)
             if self._manual_wake is not None:
                 self._manual_wake.stop()
             self._mic.stop()
@@ -162,24 +196,98 @@ class VoicePipeline:
             await self._play_asset("sleep.wav")
             return True
 
-        asyncio.ensure_future(self._play_asset("thinking.wav"))
-        reply = await self._llm.chat(self._session, text)
+        reply = await self._reply_with_tool_if_needed(text)
+        if reply is None:
+            asyncio.ensure_future(self._play_asset("thinking.wav"))
+            reply = await self._llm.chat(self._session, text)
         speech_text = clean_for_tts(reply) if reply else ""
         if not speech_text:
             await self._play_asset("error.wav")
             return False
 
-        self._state.transition(State.SPEAKING)
-        if self._tts_ws is not None:
-            # 流式：边合成边播放，首句合成完即出声
-            await self._player.play_pcm_stream(
-                self._tts_ws.stream(speech_text), self._tts_ws.sample_rate
-            )
-        else:
-            wav = await self._tts.synthesize(speech_text)
-            await self._player.play_wav_bytes(wav)
+        await self._speak_text(speech_text)
         logger.info("本轮对话完成，总耗时 {:.1f}s", turn.elapsed_ms() / 1000)
         return False
+
+    async def _reply_with_tool_if_needed(self, text: str) -> str | None:
+        if self._reminder_tool is not None and self._reminder_tool.matches(text):
+            reply = await self._reply_with_reminder_tool(text)
+            self._session.add_user(text)
+            self._session.add_assistant(reply)
+            logger.info("提醒工具回复: {!r}", reply)
+            return reply
+
+        if self._calendar_tool is not None and self._calendar_tool.matches(text):
+            reply = self._calendar_tool.reply(text)
+            self._session.add_user(text)
+            self._session.add_assistant(reply)
+            logger.info("日历工具回复: {!r}", reply)
+            return reply
+
+        if self._weather_tool is None or not self._weather_tool.matches(text):
+            return None
+        if not self._weather_tool.available:
+            logger.warning("天气查询命中，但 {} 未启用或未配置 API Key", self._weather_tool.provider)
+            reply = "我还没有配置天气查询服务。请在配置里启用天气搜索，并设置对应的 API Key。"
+            self._session.add_user(text)
+            self._session.add_assistant(reply)
+            return reply
+
+        try:
+            data = await self._weather_tool.search(text)
+            prompt = build_weather_summary_prompt(text, data)
+            reply = await self._llm.complete(
+                "你是 VoxClaw 语音助手，负责把实时工具结果整理成简洁、准确、适合语音播报的中文回答。",
+                prompt,
+                label="天气工具总结",
+            )
+            self._session.add_user(text)
+            self._session.add_assistant(reply)
+            return reply
+        except Exception as exc:
+            logger.warning("天气查询失败，回退到普通 LLM：{}", exc)
+            return None
+
+    async def _reply_with_reminder_tool(self, text: str) -> str:
+        assert self._reminder_tool is not None
+        compact = normalize_text(text)
+        if is_query_request(compact) or is_cancel_request(compact):
+            return self._reminder_tool.handle(text)
+
+        reminder, reply = self._reminder_tool.create_from_text(text)
+        summary = await self._summarize_reminder_message(text, reminder.message)
+        if summary and summary != reminder.message:
+            updated = self._reminder_tool.update_message(reminder.id, summary)
+            if updated is not None:
+                reminder = updated
+                reply = self._reminder_tool.confirmation(reminder)
+        return reply
+
+    async def _summarize_reminder_message(self, source_text: str, extracted_message: str) -> str:
+        if not extracted_message or extracted_message == "时间到了":
+            return extracted_message
+        prompt = (
+            "请把用户要提醒的事项提炼成一个适合语音播报的短中文短语。\n"
+            "要求：只输出事项本身，不要输出时间、不要解释、不要标点、不要称呼；"
+            "尽量 2 到 8 个汉字，最多不超过 12 个汉字。\n"
+            "如果没有具体事项，只输出：时间到了。\n"
+            "示例：\n"
+            "用户原话：十五分钟之后提醒我喝水；初步事项：喝水；输出：喝水\n"
+            "用户原话：半小时后提醒我我需要开会记得我；初步事项：我需要开会记得我；输出：开会\n"
+            "用户原话：明天早上八点提醒我去医院复诊；初步事项：去医院复诊；输出：医院复诊\n\n"
+            f"用户原话：{source_text}\n初步事项：{extracted_message}"
+        )
+        try:
+            summary = await self._llm.complete(
+                "你是 VoxClaw 的提醒事项提炼器，只返回短提醒事项。",
+                prompt,
+                label="提醒事项提炼",
+            )
+        except Exception as exc:
+            logger.warning("提醒事项提炼失败，使用本地提取结果：{}", exc)
+            return extracted_message
+        summary = clean_reminder_summary(summary)
+        return summary or extracted_message
 
     def _back_to_idle(self):
         self._state.to_idle()
@@ -190,6 +298,35 @@ class VoicePipeline:
     async def _play_asset(self, name: str):
         await self._player.play_file(ASSETS_DIR / name)
 
+    async def _speak_text(self, speech_text: str):
+        async with self._speech_lock:
+            self._state.to_idle()
+            self._state.transition(State.SPEAKING)
+            if self._tts_ws is not None:
+                await self._player.play_pcm_stream(
+                    self._tts_ws.stream(speech_text), self._tts_ws.sample_rate
+                )
+            else:
+                wav = await self._tts.synthesize(speech_text)
+                await self._player.play_wav_bytes(wav)
+            self._state.to_idle()
+            self._mic.clear()
+
+    async def _run_reminder_loop(self):
+        assert self._reminder_tool is not None
+        while self._running:
+            try:
+                if self._state.state is State.IDLE:
+                    for reminder in self._reminder_tool.pop_due():
+                        logger.info("提醒到点，准备播报：{}", reminder.message)
+                        await self._speak_text(build_due_speech(reminder))
+                await asyncio.sleep(self._reminder_tool.check_interval_s)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.warning("提醒检查失败：{}", exc)
+                await asyncio.sleep(self._reminder_tool.check_interval_s)
+
     async def shutdown(self):
         self._running = False
         self._player.stop()
@@ -197,3 +334,5 @@ class VoicePipeline:
             self._stt.close(), self._llm.close(), self._tts.close(),
             return_exceptions=True,
         )
+        if self._weather_tool is not None:
+            await self._weather_tool.close()

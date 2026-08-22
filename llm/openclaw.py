@@ -24,10 +24,32 @@ class OpenClawClient:
         messages += session.history(self._config.max_history)
         messages.append({"role": "user", "content": user_text})
 
+        reply = await self._chat_completion(messages, label="OpenClaw 回复")
+        session.add_user(user_text)
+        session.add_assistant(reply)
+        return reply
+
+    async def complete(self, system_prompt: str, user_text: str, label: str = "LLM 回复") -> str:
+        """发送一次性提示词，返回回复；不写入会话历史。"""
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_text},
+        ]
+        return await self._chat_completion(messages, label=label)
+
+    async def _chat_completion(self, messages: list[dict], label: str) -> str:
         timer = Timer()
         resp = await self._client.post(
             "/v1/chat/completions",
             json={"model": self._config.model, "messages": messages},
+        )
+        logger.debug(
+            "LLM 原始返回 [{}] model={} endpoint={} label={} body={}",
+            resp.status_code,
+            self._config.model,
+            self._config.endpoint,
+            label,
+            resp.text,
         )
         if resp.status_code >= 400:
             logger.warning(
@@ -39,10 +61,7 @@ class OpenClawClient:
             )
         resp.raise_for_status()
         reply = (resp.json()["choices"][0]["message"]["content"] or "").strip()
-        logger.info("OpenClaw 回复 ({:.0f} ms): {!r}", timer.elapsed_ms(), reply)
-
-        session.add_user(user_text)
-        session.add_assistant(reply)
+        logger.info("{} ({:.0f} ms): {!r}", label, timer.elapsed_ms(), reply)
         return reply
 
     async def close(self):
