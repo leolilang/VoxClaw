@@ -26,15 +26,16 @@ ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
 async def generate(config_path: str | None):
     settings = load_settings(config_path)
     if settings.tts.provider == "step":
-        if not settings.step.api_key:
-            sys.exit("未配置 step.api_key，无法调用 Step TTS")
-        tts = StepTTS(settings.step, settings.tts)
+        if not settings.tts.step.api_key:
+            sys.exit("未配置 tts.step.api_key，无法调用 Step TTS")
+        tts = StepTTS(settings.tts.step, settings.tts)
         voice_label = settings.tts.voice
     elif settings.tts.provider == "xfyun":
-        if not (settings.xfyun_tts.app_id and settings.xfyun_tts.api_key and settings.xfyun_tts.api_secret):
-            sys.exit("未配置 xfyun_tts.app_id/api_key/api_secret，无法调用讯飞 TTS")
-        tts = XfyunTTS(settings.xfyun_tts, settings.tts)
-        voice_label = settings.xfyun_tts.voice
+        xfyun_tts = settings.tts.xfyun
+        if not (xfyun_tts.app_id and xfyun_tts.api_key and xfyun_tts.api_secret):
+            sys.exit("未配置 tts.xfyun.app_id/api_key/api_secret，无法调用讯飞 TTS")
+        tts = XfyunTTS(xfyun_tts, settings.tts)
+        voice_label = xfyun_tts.voice
     else:
         sys.exit(f"未知 tts.provider: {settings.tts.provider}（可选 step / xfyun）")
 

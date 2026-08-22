@@ -3,12 +3,12 @@
 import httpx
 from loguru import logger
 
-from config.settings import StepConfig, TTSConfig
+from config.settings import StepTTSConfig, TTSConfig
 from utils.timer import Timer
 
 
 class StepTTS:
-    def __init__(self, step_config: StepConfig, tts_config: TTSConfig):
+    def __init__(self, step_config: StepTTSConfig, tts_config: TTSConfig):
         self._step = step_config
         self._tts = tts_config
         self._client = httpx.AsyncClient(timeout=60.0)

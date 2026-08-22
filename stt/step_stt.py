@@ -4,13 +4,13 @@ import httpx
 import numpy as np
 from loguru import logger
 
-from config.settings import StepConfig
+from config.settings import StepSTTConfig
 from utils.audio_utils import float_to_wav_bytes
 from utils.timer import Timer
 
 
 class StepSTT:
-    def __init__(self, config: StepConfig):
+    def __init__(self, config: StepSTTConfig):
         self._config = config
         self._client = httpx.AsyncClient(timeout=30.0)
 
